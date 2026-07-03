@@ -57,6 +57,7 @@ export default function Financials() {
     categoryId: '', branchId: '', description: '', amount: '', expenseDate: today(), paymentMethod: 'Cash', receipt: null,
   });
   const [newCategory, setNewCategory] = useState('');
+  const [editingCats, setEditingCats] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -131,6 +132,32 @@ export default function Financials() {
       setError(err.message || 'Expense could not be saved.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const renameCategory = async (cat) => {
+    const name = window.prompt('Rename category', cat.name);
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === cat.name) return;
+    setError('');
+    try {
+      const updated = await fetchApi(`/expenses/categories/${cat.id}`, { method: 'PUT', body: JSON.stringify({ name: trimmed }) });
+      setCategories(current => current.map(c => (c.id === cat.id ? updated : c)).sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (err) {
+      setError(err.message || 'Category could not be renamed.');
+    }
+  };
+
+  const deleteCategory = async (cat) => {
+    if (!window.confirm(`Delete category "${cat.name}"? Existing expenses keep their records.`)) return;
+    setError('');
+    try {
+      await fetchApi(`/expenses/categories/${cat.id}`, { method: 'DELETE' });
+      setCategories(current => current.filter(c => c.id !== cat.id));
+      setExpenseForm(current => (String(current.categoryId) === String(cat.id) ? { ...current, categoryId: '' } : current));
+    } catch (err) {
+      setError(err.message || 'Category could not be deleted.');
     }
   };
 
@@ -263,13 +290,30 @@ export default function Financials() {
               </select>
             </div>
             {categories.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {categories.map(cat => (
-                  <button type="button" key={cat.id} onClick={() => setExpenseForm({ ...expenseForm, categoryId: cat.id })}
-                    className={`rounded-full border px-3 py-1 text-xs font-bold transition-colors ${String(expenseForm.categoryId) === String(cat.id) ? 'border-transparent bg-[var(--primary)] text-white' : 'border-gray-200 text-gray-500 hover:border-[var(--primary)] hover:text-[var(--primary)] dark:border-white/10 dark:text-gray-400'}`}>
-                    {cat.name}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Categories</span>
+                  <button type="button" onClick={() => setEditingCats(v => !v)}
+                    className="text-[11px] font-bold text-[var(--primary)] hover:underline">
+                    {editingCats ? 'Done' : 'Edit'}
                   </button>
-                ))}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {categories.map(cat => (
+                    editingCats ? (
+                      <span key={cat.id} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 py-1 pl-3 pr-1.5 text-xs font-bold text-gray-600 dark:border-white/10 dark:text-gray-300">
+                        <button type="button" onClick={() => renameCategory(cat)} title="Rename category" className="hover:text-[var(--primary)]">{cat.name}</button>
+                        <button type="button" onClick={() => deleteCategory(cat)} title="Delete category"
+                          className="flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600 dark:bg-white/10">×</button>
+                      </span>
+                    ) : (
+                      <button type="button" key={cat.id} onClick={() => setExpenseForm({ ...expenseForm, categoryId: cat.id })}
+                        className={`rounded-full border px-3 py-1 text-xs font-bold transition-colors ${String(expenseForm.categoryId) === String(cat.id) ? 'border-transparent bg-[var(--primary)] text-white' : 'border-gray-200 text-gray-500 hover:border-[var(--primary)] hover:text-[var(--primary)] dark:border-white/10 dark:text-gray-400'}`}>
+                        {cat.name}
+                      </button>
+                    )
+                  ))}
+                </div>
               </div>
             )}
             <div className="flex gap-2">

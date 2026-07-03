@@ -401,6 +401,8 @@ $routes = [
     // Expenses Routes
     ['GET', '^api/v1/expenses/categories$', 'ExpenseController', 'categories', ['owner', 'manager', 'accountant']],
     ['POST', '^api/v1/expenses/categories$', 'ExpenseController', 'createCategory', ['owner', 'manager', 'accountant']],
+    ['PUT', '^api/v1/expenses/categories/([^/]+)$', 'ExpenseController', 'updateCategory', ['owner', 'manager', 'accountant']],
+    ['DELETE', '^api/v1/expenses/categories/([^/]+)$', 'ExpenseController', 'removeCategory', ['owner', 'manager', 'accountant']],
     ['GET', '^api/v1/expenses$', 'ExpenseController', 'list', ['owner', 'manager', 'accountant']],
     ['POST', '^api/v1/expenses$', 'ExpenseController', 'create', ['owner', 'manager', 'accountant']],
     ['GET', '^api/v1/expenses/([^/]+)$', 'ExpenseController', 'get', ['owner', 'manager', 'accountant']],

@@ -84,6 +84,41 @@ class ExpenseController {
         send_json($stmt->fetch(), 201);
     }
 
+    // Rename a category (tenant-scoped).
+    public function updateCategory($input, $user, $id) {
+        $db = $this->db($user);
+        $name = trim((string)($input['name'] ?? ''));
+        if ($name === '') send_error('Category name is required', 400);
+        if (strlen($name) > 120) send_error('Category name is too long', 400);
+
+        $stmt = $db->prepare("SELECT id FROM ExpenseCategory WHERE id = ? AND clinicId = ? AND isActive = 1");
+        $stmt->execute([$id, $user['clinicId']]);
+        if (!$stmt->fetch()) send_error('Category not found', 404);
+
+        try {
+            $stmt = $db->prepare("UPDATE ExpenseCategory SET name = ? WHERE id = ? AND clinicId = ?");
+            $stmt->execute([$name, $id, $user['clinicId']]);
+        } catch (Exception $e) {
+            send_error('Another category already has that name', 409);
+        }
+        $stmt = $db->prepare("SELECT * FROM ExpenseCategory WHERE id = ? AND clinicId = ?");
+        $stmt->execute([$id, $user['clinicId']]);
+        send_json($stmt->fetch());
+    }
+
+    // Soft-delete a category. Existing expenses keep their categoryId (their
+    // record is preserved); the category just stops appearing in the picker.
+    public function removeCategory($input, $user, $id) {
+        $db = $this->db($user);
+        $stmt = $db->prepare("SELECT id FROM ExpenseCategory WHERE id = ? AND clinicId = ? AND isActive = 1");
+        $stmt->execute([$id, $user['clinicId']]);
+        if (!$stmt->fetch()) send_error('Category not found', 404);
+
+        $stmt = $db->prepare("UPDATE ExpenseCategory SET isActive = 0 WHERE id = ? AND clinicId = ?");
+        $stmt->execute([$id, $user['clinicId']]);
+        send_json(['message' => 'Category removed']);
+    }
+
     public function list($input, $user) {
         $db = $this->db($user);
         $from = $_GET['from'] ?? date('Y-m-01');
