@@ -4,6 +4,7 @@ import { Users, Search, Grid, List, Plus, Phone, Mail, BadgeDollarSign, Loader2,
 import { fetchApi, peekApiCacheByPrefix } from '../config/api';
 import { TableSkeleton } from '../components/ui/Skeleton';
 import { useClinic } from '../context/ClinicContext';
+import { canViewBusinessFinancials } from '../config/roles';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -173,12 +174,14 @@ function ClientCard({ client, onClick, onEdit, onDelete }) {
         {client.loyaltyTier && <Badge label={client.loyaltyTier} variant={client.loyaltyTier} />}
       </div>
 
-      <div className="border-t border-gray-50 dark:border-white/10 pt-3 grid grid-cols-3 gap-2">
-        <div>
-          <p className="text-xs text-gray-400">Total Spent</p>
-          <p className="text-sm font-bold text-gray-900 dark:text-white">PKR {Number(client.totalSpent || 0).toLocaleString()}</p>
-        </div>
-        <div className="text-right">
+      <div className={`border-t border-gray-50 dark:border-white/10 pt-3 grid gap-2 ${canViewBusinessFinancials() ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        {canViewBusinessFinancials() && (
+          <div>
+            <p className="text-xs text-gray-400">Total Spent</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-white">PKR {Number(client.totalSpent || 0).toLocaleString()}</p>
+          </div>
+        )}
+        <div className={canViewBusinessFinancials() ? 'text-right' : ''}>
           <p className="text-xs text-gray-400">Loyalty Pts</p>
           <p className="text-sm font-bold text-indigo-600">{Number(client.loyaltyPoints || 0).toLocaleString()}</p>
         </div>
@@ -337,10 +340,12 @@ export default function Clients() {
         <span className="font-medium text-gray-700 dark:text-gray-200">Showing {filtered.length} of {pagination.total.toLocaleString()} {term('patients', 'patients').toLowerCase()}</span>
         <span>·</span>
         <span>{filtered.filter(c => c.status === 'active').length} active</span>
-        <span>·</span>
-        <span className="text-indigo-600 font-medium">
-          PKR {filtered.reduce((a, c) => a + Number(c.totalSpent || 0), 0).toLocaleString()} total revenue
-        </span>
+        {canViewBusinessFinancials() && (<>
+          <span>·</span>
+          <span className="text-indigo-600 font-medium">
+            PKR {filtered.reduce((a, c) => a + Number(c.totalSpent || 0), 0).toLocaleString()} total revenue
+          </span>
+        </>)}
         <span>·</span>
         <span className="text-red-600 font-medium flex items-center gap-1">
           <BadgeDollarSign className="w-3.5 h-3.5" />
@@ -368,7 +373,7 @@ export default function Clients() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-white/10">
-                {[term('patient', 'Patient'), `${term('patient', 'Patient')} No`, 'Contact', 'Tier', 'Total Spent', 'Due', 'Status', 'Actions'].map(h => (
+                {[term('patient', 'Patient'), `${term('patient', 'Patient')} No`, 'Contact', 'Tier', ...(canViewBusinessFinancials() ? ['Total Spent'] : []), 'Due', 'Status', 'Actions'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -396,7 +401,7 @@ export default function Clients() {
                     <p className="text-[10px] text-gray-400">{client.email}</p>
                   </td>
                   <td className="px-4 py-3.5">{client.loyaltyTier && <Badge label={client.loyaltyTier} variant={client.loyaltyTier} />}</td>
-                  <td className="px-4 py-3.5 font-semibold text-gray-900 dark:text-white text-xs">PKR {Number(client.totalSpent || 0).toLocaleString()}</td>
+                  {canViewBusinessFinancials() && <td className="px-4 py-3.5 font-semibold text-gray-900 dark:text-white text-xs">PKR {Number(client.totalSpent || 0).toLocaleString()}</td>}
                   <td className={`px-4 py-3.5 font-bold text-xs ${(client.outstandingBalance || 0) > 0 ? 'text-red-600' : 'text-emerald-600'}`}>PKR {Number(client.outstandingBalance || 0).toLocaleString()}</td>
                   <td className="px-4 py-3.5">{client.status && <Badge label={client.status} variant={client.status} />}</td>
                   <td className="px-4 py-3.5">
