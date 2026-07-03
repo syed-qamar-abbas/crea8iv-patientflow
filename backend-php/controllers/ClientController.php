@@ -84,7 +84,8 @@ class ClientController {
         // procedure cost incurred, and net profit. Cost/profit hidden otherwise.
         if (pf_can_manage_procedure_costs($user)) {
             try {
-                $stmt = $db->prepare("SELECT COALESCE(SUM(cost), 0) FROM TreatmentProcedureDetail WHERE clientId = ? AND clinicId = ?");
+                // Canonical cost source = InvoiceProcedureCost (same as clinic P&L).
+                $stmt = $db->prepare("SELECT COALESCE(SUM(procedureCost), 0) FROM InvoiceProcedureCost WHERE clientId = ? AND clinicId = ?");
                 $stmt->execute([$id, $user['clinicId']]);
                 $procedureCost = floatval($stmt->fetchColumn() ?: 0);
             } catch (Exception $e) { $procedureCost = 0; }

@@ -3,8 +3,26 @@ require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../services/pdfService.php';
 require_once __DIR__ . '/../services/invoiceMath.php';
+require_once __DIR__ . '/../services/dentalFinancialService.php';
 
 class InvoiceController {
+    // Record the clinic's INTERNAL cost for an invoice (never shown to the
+    // patient / not on the PDF). Feeds per-patient net profit + clinic P&L via
+    // InvoiceProcedureCost. Only privileged roles may set it. Passing null skips.
+    private function saveInternalCost($db, $user, $invoiceId, $clientId, $appointmentId, $procedureCost, $patientCharge) {
+        // NOTE: do NOT run pf_dental_financials_ensure() here — its CREATE/ALTER
+        // DDL would implicitly commit the caller's open transaction on MariaDB.
+        // The InvoiceProcedureCost table is part of the base schema.
+        if ($procedureCost === null || !pf_can_manage_procedure_costs($user)) return;
+        $cost = max(0.0, floatval($procedureCost));
+        $db->prepare("DELETE FROM InvoiceProcedureCost WHERE clinicId = ? AND invoiceId = ?")
+           ->execute([$user['clinicId'], $invoiceId]);
+        if ($cost > 0) {
+            $db->prepare("INSERT INTO InvoiceProcedureCost (id, clinicId, invoiceId, invoiceItemIndex, appointmentId, clientId, patientCharge, procedureCost, createdBy) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)")
+               ->execute([generate_uuid(), $user['clinicId'], $invoiceId, $appointmentId ?: null, $clientId, max(0.0, floatval($patientCharge)), $cost, $user['id'] ?? null]);
+        }
+    }
+
     private function assertAppointmentInClinic($db, $appointmentId, $clinicId, $clientId = null) {
         if (empty($appointmentId)) return;
         $sql = "SELECT id FROM Appointment WHERE id = ? AND clinicId = ?";
@@ -154,7 +172,8 @@ class InvoiceController {
         $stmtDues->execute([$user['clinicId']]);
         $patientDues = floatval($stmtDues->fetchColumn() ?: 0);
         
-        $sql = "SELECT i.*, 
+        $sql = "SELECT i.*,
+                       (SELECT COALESCE(SUM(procedureCost), 0) FROM InvoiceProcedureCost pc WHERE pc.invoiceId = i.id AND pc.clinicId = i.clinicId) AS procedureCost,
                        c.name as clientName, c.phone as clientPhone,
                        cl.id as clinic_id, cl.name as clinic_name, cl.tagline as clinic_tagline,
                        cl.logo as clinic_logo, cl.address as clinic_address, cl.phone as clinic_phone,
@@ -174,6 +193,10 @@ class InvoiceController {
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $invoices = $stmt->fetchAll();
+
+        // The internal procedure cost is privileged — strip it for other roles.
+        $canCost = pf_can_manage_procedure_costs($user);
+        if (!$canCost) { foreach ($invoices as &$_iv) { unset($_iv['procedureCost']); } unset($_iv); }
 
         $formatted = [];
         foreach ($invoices as $row) {
@@ -332,6 +355,10 @@ class InvoiceController {
                 $invoiceId, $user['clinicId'], $clientId, $appointmentId, $invoiceNo, json_encode($totals['items']), $totals['subtotal'], $previousBalance, $totals['discount'], $totals['tax'], $totals['total'], $totals['grandTotal'], $totals['amountPaid'], $totals['balanceDue'], $totals['status'], $paymentMethod, $notes, $dueDate
             ]);
 
+            if (array_key_exists('procedureCost', $input)) {
+                $this->saveInternalCost($db, $user, $invoiceId, $clientId, $appointmentId, $input['procedureCost'], $totals['grandTotal']);
+            }
+
             $this->recomputeClientTotals($db, $user['clinicId'], $clientId);
 
             $db->commit();
@@ -416,6 +443,10 @@ class InvoiceController {
                 $id,
                 $user['clinicId']
             ]);
+
+            if (array_key_exists('procedureCost', $input)) {
+                $this->saveInternalCost($db, $user, $id, $clientId, $appointmentId, $input['procedureCost'], $totals['grandTotal']);
+            }
 
             $this->recomputeClientTotals($db, $user['clinicId'], $existing['clientId']);
             if ($clientId !== $existing['clientId']) {

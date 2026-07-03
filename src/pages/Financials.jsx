@@ -322,9 +322,9 @@ export default function Financials() {
             </div>
             <input value={expenseForm.description} onChange={e => setExpenseForm({ ...expenseForm, description: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder="Description, e.g. electricity bill" />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">PKR</span>
-                <input type="number" min="0" value={expenseForm.amount} onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })} className="w-full rounded-lg border border-gray-200 pl-11 pr-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder="Amount" />
+              <div className="relative min-w-0">
+                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-gray-400">PKR</span>
+                <input type="number" min="0" value={expenseForm.amount} onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })} className="w-full rounded-lg border border-gray-200 pl-10 pr-2 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder="Amount" />
               </div>
               <input type="date" value={expenseForm.expenseDate} onChange={e => setExpenseForm({ ...expenseForm, expenseDate: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" />
               <select value={expenseForm.paymentMethod} onChange={e => setExpenseForm({ ...expenseForm, paymentMethod: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900">

@@ -8,7 +8,7 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import ClinicLogoMark from '../components/branding/ClinicLogoMark';
 import PatientSearchSelect from '../components/ui/PatientSearchSelect';
-import { canManageInvoiceAdmin, isReceptionist } from '../config/roles';
+import { canManageInvoiceAdmin, isReceptionist, canViewBusinessFinancials } from '../config/roles';
 
 const statusVariant = { paid: 'paid', pending: 'pending', partial: 'pending', refunded: 'refunded' };
 const money = (value = 0) => `PKR ${Math.round(Number(value || 0)).toLocaleString()}`;
@@ -23,6 +23,7 @@ const emptyInvoice = {
   paymentMethod: 'Cash',
   notes: '',
   dueDate: '',
+  procedureCost: '',      // internal clinic cost — NOT shown to the patient
 };
 
 const normalizeItems = (items = []) => items.length ? items.map(item => ({
@@ -72,6 +73,7 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, clients, services,
       notes: invoice.notes || '',
       dueDate: invoice.dueDate || '',
       previousBalance: Number(invoice.previousBalance || 0),
+      procedureCost: invoice.procedureCost != null ? String(invoice.procedureCost) : '',
     });
   }, [invoice, isOpen]);
 
@@ -110,6 +112,7 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, clients, services,
       notes: form.notes,
       dueDate: form.dueDate || null,
       previousBalance: Number(form.previousBalance || 0),
+      ...(canViewBusinessFinancials() ? { procedureCost: Number(form.procedureCost || 0) } : {}),
     });
   };
 
@@ -181,6 +184,16 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, clients, services,
           <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">Due Date<input type="date" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" value={form.dueDate || ''} onChange={e => set('dueDate', e.target.value)} /></label>
           <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">Notes<input className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Optional notes" /></label>
         </div>
+
+        {canViewBusinessFinancials() && (
+          <label className="block rounded-lg border border-dashed border-amber-300/60 bg-amber-50/50 p-3 text-xs font-semibold text-gray-700 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-gray-200">
+            Internal cost <span className="font-normal text-gray-500">— your cost for this work, for profit tracking. Never shown to the patient or on the invoice.</span>
+            <div className="relative mt-1.5 max-w-[220px]">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">PKR</span>
+              <input type="number" min="0" step="any" inputMode="decimal" value={form.procedureCost} onChange={e => set('procedureCost', e.target.value)} className="w-full rounded-lg border border-gray-200 bg-white pl-11 pr-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder="Cost amount" />
+            </div>
+          </label>
+        )}
 
         <div className="rounded-xl bg-gray-50 p-4 text-sm dark:bg-white/5">
           <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{money(totals.subtotal)}</span></div>

@@ -153,3 +153,9 @@ body {
 @keyframes publicOfferScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .public-offer-track { animation: publicOfferScroll 32s linear infinite; }
 .public-offer-track:hover { animation-play-state: paused; }
+
+/* Money/number inputs: hide the native spinner arrows — they crowd the field and
+   push long amounts out of view (e.g. the PKR expense/cost fields). */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
