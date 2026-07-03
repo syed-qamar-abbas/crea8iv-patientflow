@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
+require_once __DIR__ . '/../services/dentalFinancialService.php';
 
 class ClientController {
     private function assertClientInClinic($db, $id, $clinicId) {
@@ -78,6 +79,21 @@ class ClientController {
         if (!$client) {
             send_error('Client not found', 404);
         }
+
+        // Per-patient P&L for privileged roles: revenue collected (totalSpent),
+        // procedure cost incurred, and net profit. Cost/profit hidden otherwise.
+        if (pf_can_manage_procedure_costs($user)) {
+            try {
+                $stmt = $db->prepare("SELECT COALESCE(SUM(cost), 0) FROM TreatmentProcedureDetail WHERE clientId = ? AND clinicId = ?");
+                $stmt->execute([$id, $user['clinicId']]);
+                $procedureCost = floatval($stmt->fetchColumn() ?: 0);
+            } catch (Exception $e) { $procedureCost = 0; }
+            $revenue = floatval($client['totalSpent'] ?? 0);
+            $client['procedureCostTotal'] = $procedureCost;
+            $client['netProfit'] = $revenue - $procedureCost;
+            $client['canViewCost'] = true;
+        }
+
         send_json($client);
     }
 

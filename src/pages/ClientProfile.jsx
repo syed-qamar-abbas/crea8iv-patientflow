@@ -196,6 +196,7 @@ function DentalProcedureDetails({ clientId, appointments }) {
   const doctorLabel = term('doctor', 'Doctor');
   const [items, setItems] = useState(null);
   const [canManageCost, setCanManageCost] = useState(false);
+  const [services, setServices] = useState([]);
   const [form, setForm] = useState(emptyProcedure);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -205,6 +206,14 @@ function DentalProcedureDetails({ clientId, appointments }) {
     setCanManageCost(!!res.canManageCost);
   }).catch(e => setErr(e.message));
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [clientId]);
+  // Services power the treatment-type picker + auto-fill the cost.
+  useEffect(() => { fetchApi('/services').then(r => setServices(Array.isArray(r) ? r : (r.services || r.data || []))).catch(() => {}); }, []);
+
+  // Pick a service (or type a custom name); auto-fill cost from the service price.
+  const chooseTreatmentType = (v) => setForm(cur => {
+    const svc = services.find(s => (s.name || '').toLowerCase() === (v || '').toLowerCase());
+    return { ...cur, procedureType: v, ...(svc && canManageCost ? { cost: svc.price } : {}) };
+  });
 
   const visibleFields = procedurePresets[form.procedureType] || ['toothNumber', 'notes'];
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
@@ -252,7 +261,10 @@ function DentalProcedureDetails({ clientId, appointments }) {
       {err && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{err}</p>}
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-        <input value={form.procedureType} onChange={e => set('procedureType', e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder={`${treatmentLabel} type`} />
+        <input list="pf-service-list" value={form.procedureType} onChange={e => chooseTreatmentType(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder={`${treatmentLabel} type — pick a service or type custom`} />
+        <datalist id="pf-service-list">
+          {services.map(s => <option key={s.id} value={s.name} label={`PKR ${Number(s.price || 0).toLocaleString()}`} />)}
+        </datalist>
         <input type="date" value={String(form.performedAt || '').slice(0, 10)} onChange={e => set('performedAt', e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" title="Treatment date" />
         <select value={form.status} onChange={e => set('status', e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" title="Status">
           <option value="completed">Completed</option>
@@ -436,6 +448,16 @@ export default function ClientProfile() {
             <InfoCard label={`${visitLabel}s`} value={totals.visits} />
             <InfoCard label="Upcoming" value={totals.upcoming} />
           </div>
+          {client.canViewCost && (
+            <div className="mt-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Patient profit &amp; loss</p>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div><p className="text-[10px] font-semibold uppercase text-gray-400">Revenue</p><p className="mt-1 text-sm font-black text-emerald-600">{money(client.totalSpent)}</p></div>
+                <div className="border-x border-gray-100 dark:border-white/10"><p className="text-[10px] font-semibold uppercase text-gray-400">Cost</p><p className="mt-1 text-sm font-black text-gray-700 dark:text-gray-200">{money(client.procedureCostTotal)}</p></div>
+                <div><p className="text-[10px] font-semibold uppercase text-gray-400">Net Profit</p><p className={`mt-1 text-sm font-black ${Number(client.netProfit) >= 0 ? 'text-[var(--primary)]' : 'text-rose-600'}`}>{money(client.netProfit)}</p></div>
+              </div>
+            </div>
+          )}
         </aside>
 
         <main className="space-y-5">
