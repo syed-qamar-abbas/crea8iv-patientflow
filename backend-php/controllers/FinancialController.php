@@ -14,40 +14,53 @@ class FinancialController {
 
     public function getSummary($input, $user) {
         $db = $this->ensure($user);
-        
+
+        // Optional date range — every figure below respects it. Empty = all time.
+        $from = pf_valid_date($_GET['from'] ?? '') ? $_GET['from'] . ' 00:00:00' : null;
+        $to   = pf_valid_date($_GET['to'] ?? '')   ? $_GET['to'] . ' 23:59:59'   : null;
+
+        // Revenue (collected) + Pending (unpaid) from invoices created in range.
+        $invWhere = "clinicId = ?"; $invParams = [$user['clinicId']];
+        if ($from && $to) { $invWhere .= " AND createdAt >= ? AND createdAt <= ?"; $invParams[] = $from; $invParams[] = $to; }
         $stmt = $db->prepare("
             SELECT
                 COALESCE(SUM(CASE WHEN status != 'refunded' THEN amountPaid ELSE 0 END), 0) AS totalRevenue,
                 COALESCE(SUM(CASE WHEN status IN ('pending', 'partial') THEN balanceDue ELSE 0 END), 0) AS outstandingPayments
-            FROM Invoice
-            WHERE clinicId = ?
+            FROM Invoice WHERE $invWhere
         ");
-        $stmt->execute([$user['clinicId']]);
+        $stmt->execute($invParams);
         $summary = $stmt->fetch();
         $totalRevenue = floatval($summary['totalRevenue'] ?? 0);
         $outstandingPayments = floatval($summary['outstandingPayments'] ?? 0);
 
-        $stmtExpense = $db->prepare("SELECT COALESCE(SUM(amount), 0) FROM Expense WHERE clinicId = ? AND archivedAt IS NULL");
-        $stmtExpense->execute([$user['clinicId']]);
-        $totalExpenses = floatval($stmtExpense->fetchColumn() ?: 0);
+        // General clinic expenses in range (by expense date).
+        $expWhere = "clinicId = ? AND archivedAt IS NULL"; $expParams = [$user['clinicId']];
+        if ($from && $to) { $expWhere .= " AND expenseDate >= ? AND expenseDate <= ?"; $expParams[] = substr($from, 0, 10); $expParams[] = substr($to, 0, 10); }
+        $stmtExpense = $db->prepare("SELECT COALESCE(SUM(amount), 0) FROM Expense WHERE $expWhere");
+        $stmtExpense->execute($expParams);
+        $generalExpenses = floatval($stmtExpense->fetchColumn() ?: 0);
 
-        $stmtCost = $db->prepare("SELECT COALESCE(SUM(procedureCost), 0) FROM InvoiceProcedureCost WHERE clinicId = ?");
-        $stmtCost->execute([$user['clinicId']]);
+        // Procedure costs (internal), for invoices created in range.
+        $pcWhere = "pc.clinicId = ?"; $pcParams = [$user['clinicId']];
+        if ($from && $to) { $pcWhere .= " AND i.createdAt >= ? AND i.createdAt <= ?"; $pcParams[] = $from; $pcParams[] = $to; }
+        $stmtCost = $db->prepare("SELECT COALESCE(SUM(pc.procedureCost), 0) FROM InvoiceProcedureCost pc JOIN Invoice i ON i.id = pc.invoiceId AND i.clinicId = pc.clinicId WHERE $pcWhere");
+        $stmtCost->execute($pcParams);
         $procedureCosts = floatval($stmtCost->fetchColumn() ?: 0);
 
-        $grossProfit = $totalRevenue - $procedureCosts;
-        $netProfit = $grossProfit - $totalExpenses;
+        // Simple model: Expenses = general expenses + procedure costs; Profit = Revenue - Expenses.
+        $totalExpensesAll = $generalExpenses + $procedureCosts;
+        $profit = $totalRevenue - $totalExpensesAll;
 
         send_json([
             'totalRevenue' => $totalRevenue,
-            'totalExpenses' => $totalExpenses,
+            'totalExpenses' => $totalExpensesAll,   // combined (general + procedure) — the "Expenses" card
+            'generalExpenses' => $generalExpenses,
             'procedureCosts' => $procedureCosts,
-            'grossProfit' => $grossProfit,
-            'netProfit' => $netProfit,
+            'profit' => $profit,                    // Revenue - Expenses — the "Profit" card
             'outstandingPayments' => $outstandingPayments,
-            'revenueGrowth' => 0,
-            'expenseGrowth' => 0,
-            'profitGrowth' => 0
+            // Back-compat aliases:
+            'grossProfit' => $totalRevenue - $procedureCosts,
+            'netProfit' => $profit,
         ]);
     }
 

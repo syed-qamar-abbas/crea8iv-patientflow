@@ -67,7 +67,7 @@ export default function Financials() {
     setError('');
     try {
       const [sum, months, txns, expensePayload, cats, branchRows, profitRows] = await Promise.all([
-        fetchApi('/financials/summary'),
+        fetchApi(`/financials/summary?from=${range.from}&to=${range.to}`),
         fetchApi('/financials/monthly'),
         fetchApi('/financials/transactions?limit=50'),
         fetchApi(`/expenses?from=${range.from}&to=${range.to}`),
@@ -230,12 +230,11 @@ export default function Financials() {
 
       {error && <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard label="Revenue" value={money(summary?.totalRevenue)} helper="Paid invoice amount" icon={DollarSign} tone="bg-emerald-50 text-emerald-700" />
-        <SummaryCard label="Expenses" value={money(summary?.totalExpenses)} helper="General clinic expenses" icon={TrendingDown} tone="bg-rose-50 text-rose-600" />
-        <SummaryCard label="Gross Profit" value={money(summary?.grossProfit)} helper="Revenue minus procedure costs" icon={TrendingUp} tone="bg-blue-50 text-blue-700" />
-        <SummaryCard label="Net Profit" value={money(summary?.netProfit)} helper="Gross profit minus expenses" icon={BarChart3} tone="bg-indigo-50 text-indigo-700" />
-        <SummaryCard label="Outstanding" value={money(summary?.outstandingPayments)} helper="Pending and partial invoice balance" icon={AlertCircle} tone="bg-amber-50 text-amber-700" />
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <SummaryCard label="Revenue" value={money(summary?.totalRevenue)} helper="Collected from paid invoices" icon={DollarSign} tone="bg-emerald-50 text-emerald-700" />
+        <SummaryCard label="Expenses" value={money(summary?.totalExpenses)} helper="Clinic expenses + procedure costs" icon={TrendingDown} tone="bg-rose-50 text-rose-600" />
+        <SummaryCard label="Profit" value={money(summary?.profit)} helper="Revenue − Expenses" icon={TrendingUp} tone="bg-indigo-50 text-indigo-700" />
+        <SummaryCard label="Pending" value={money(summary?.outstandingPayments)} helper="Unpaid invoice balance" icon={AlertCircle} tone="bg-amber-50 text-amber-700" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
