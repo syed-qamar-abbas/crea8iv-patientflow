@@ -118,24 +118,6 @@ function log_audit($clinicId, $userId, $action, $entity, $entityId = null, $oldD
     }
 }
 
-// QR Code helper
-function generate_qr_data_url($appointmentId, $clientName, $date, $time) {
-    $data = [
-        'appointmentId' => $appointmentId,
-        'clientName' => $clientName,
-        'date' => $date,
-        'time' => $time,
-        'type' => 'checkin',
-        'clinic' => 'The Smile Expert'
-    ];
-    $apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?data=' . urlencode(json_encode($data)) . '&size=200x200';
-    $qrData = @file_get_contents($apiUrl);
-    if ($qrData) {
-        return 'data:image/png;base64,' . base64_encode($qrData);
-    }
-    return $apiUrl;
-}
-
 // Multi-tenant: resolve which clinic a request belongs to from its host.
 // Priority: exact custom domain (e.g. portal.thesmilexperts.com)
 //           then slug subdomain ({slug}.crea8ivmedia.com).

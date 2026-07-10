@@ -2,6 +2,8 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../services/whatsappAutomationService.php';
+require_once __DIR__ . '/../services/checkinTokenService.php';
+require_once __DIR__ . '/../services/qrService.php';
 
 class AppointmentController {
     private function validateDateTimeRange($date, $startTime, $endTime) {
@@ -254,16 +256,9 @@ class AppointmentController {
             send_error('Time slot conflict: staff already has an appointment in this period', 409, ['conflicts' => $conflicts]);
         }
 
-        // Get Client name for QR code
-        $stmtClient = $db->prepare("SELECT name FROM Client WHERE id = ? AND clinicId = ?");
-        $stmtClient->execute([$clientId, $user['clinicId']]);
-        $clientName = $stmtClient->fetchColumn() ?: 'Client';
-
-        $qrCode = generate_qr_data_url($id, $clientName, $date, $startTime);
-
-        $stmt = $db->prepare("INSERT INTO Appointment (id, clinicId, branchId, clientId, staffId, serviceId, date, startTime, endTime, duration, status, room, notes, price, specialty, qrCode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt = $db->prepare("INSERT INTO Appointment (id, clinicId, branchId, clientId, staffId, serviceId, date, startTime, endTime, duration, status, room, notes, price, specialty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
-            $id, $user['clinicId'], $branchId, $clientId, $staffId, $serviceId, $date, $startTime, $endTime, $duration, $status, $room, $notes, $price, $specialty, $qrCode
+            $id, $user['clinicId'], $branchId, $clientId, $staffId, $serviceId, $date, $startTime, $endTime, $duration, $status, $room, $notes, $price, $specialty
         ]);
 
         $stmt = $db->prepare("SELECT * FROM Appointment WHERE id = ?");
@@ -411,19 +406,11 @@ class AppointmentController {
 
     public function checkIn($input, $user, $id) {
         $db = DB::getConnection();
-        
-        // Find appointment
-        $stmt = $db->prepare("SELECT * FROM Appointment WHERE id = ? AND clinicId = ?");
-        $stmt->execute([$id, $user['clinicId']]);
-        $appt = $stmt->fetch();
-        if (!$appt) {
-            send_error('Appointment not found', 404);
+        try {
+            $appt = pf_manual_checkin_appointment($db, $user['clinicId'], $id);
+        } catch (CheckinTokenException $e) {
+            send_error($e->getMessage(), $e->httpStatus, ['code' => $e->reasonCode]);
         }
-
-        // Perform check-in
-        $now = date('Y-m-d H:i:s');
-        $stmt = $db->prepare("UPDATE Appointment SET checkedIn = 1, checkinTime = ?, status = 'confirmed' WHERE id = ? AND clinicId = ?");
-        $stmt->execute([$now, $id, $user['clinicId']]);
 
         // Award loyalty points
         $points = floor(floatval($appt['price']) / 100);
@@ -433,6 +420,59 @@ class AppointmentController {
         }
 
         send_json(['message' => 'Checked in']);
+    }
+
+    public function issueCheckinToken($input, $user, $id) {
+        $db = DB::getConnection();
+        try {
+            $token = pf_issue_checkin_token($db, $user['clinicId'], $id, $user['id'] ?? null);
+            $qrImage = pf_render_checkin_qr_data_uri($token['payload']);
+            log_audit($user['clinicId'], $user['id'] ?? null, 'checkin_token_issued', 'Appointment', $id, null, [
+                'tokenId' => $token['id'],
+                'expiresAt' => $token['expiresAt'],
+            ]);
+            send_json([
+                'qrImage' => $qrImage,
+                'expiresAt' => $token['expiresAt'],
+            ], 201);
+        } catch (CheckinTokenException $e) {
+            send_error($e->getMessage(), $e->httpStatus, ['code' => $e->reasonCode]);
+        }
+    }
+
+    public function revokeCheckinToken($input, $user, $id) {
+        $db = DB::getConnection();
+        $reason = pf_checkin_token_revoke_reason($input['reason'] ?? 'revoked_by_user');
+        try {
+            $revoked = pf_revoke_checkin_tokens($db, $user['clinicId'], $id, $reason);
+            log_audit($user['clinicId'], $user['id'] ?? null, 'checkin_token_revoked', 'Appointment', $id, null, [
+                'revokedCount' => $revoked,
+                'reason' => $reason,
+            ]);
+            send_json(['message' => 'Check-in QR revoked', 'revoked' => $revoked]);
+        } catch (CheckinTokenException $e) {
+            send_error($e->getMessage(), $e->httpStatus, ['code' => $e->reasonCode]);
+        }
+    }
+
+    public function scanCheckinToken($input, $user) {
+        $payload = $input['payload'] ?? '';
+        $db = DB::getConnection();
+        try {
+            $result = pf_consume_checkin_token($db, $user['clinicId'], $payload, $user['id'] ?? null);
+
+            log_audit($user['clinicId'], $user['id'] ?? null, 'checkin_token_consumed', 'Appointment', $result['appointmentId'], null, [
+                'tokenId' => $result['tokenId'],
+                'checkedInAt' => $result['checkedInAt'],
+            ]);
+            send_json([
+                'message' => 'Checked in',
+                'appointmentId' => $result['appointmentId'],
+                'checkedInAt' => $result['checkedInAt'],
+            ]);
+        } catch (CheckinTokenException $e) {
+            send_error($e->getMessage(), $e->httpStatus, ['code' => $e->reasonCode]);
+        }
     }
 
     public function getToday($input, $user) {

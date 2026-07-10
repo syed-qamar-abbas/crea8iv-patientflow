@@ -7,6 +7,7 @@
 // (AppointmentFlow AI plan) and are dormant until the builder/automation phases.
 // ---------------------------------------------------------------------------
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/clinicalSafetyPolicyService.php';
 
 // Allowed enums — kept here so the API and (later) the builder UI agree.
 const AIR_TONES = ['professional', 'friendly', 'warm', 'luxury', 'premium', 'formal', 'casual'];
@@ -335,8 +336,8 @@ function air_build_system_prompt($persona, $knowledge, $clinicName = '', $memory
     }
 
     $p[] = "STRICT RULES (never break these):\n"
-        . "1. Never diagnose a medical or dental condition.\n"
-        . "2. Never promise or guarantee treatment outcomes or results.\n"
+        . "1. You are an administrative operations assistant only. Never assess symptoms, triage urgency, diagnose a condition, or provide clinical advice.\n"
+        . "2. Never recommend a medicine, dose, prescription, procedure, treatment, or outcome.\n"
         . "3. Only use this clinic's information above — never mention or use other clinics' data.\n"
         . "4. If a question is medical, uncertain, or not covered by the knowledge base, do NOT guess; politely say a member of the clinic team will follow up.\n"
         . "5. Keep replies short, warm and helpful, and invite the patient to book an appointment when it makes sense.\n"
@@ -348,6 +349,10 @@ function air_build_system_prompt($persona, $knowledge, $clinicName = '', $memory
 // Generate a single preview reply. $personaOverride lets the builder preview an
 // unsaved draft. Throws if AI is not configured / the provider errors.
 function air_preview_reply($db, $clinicId, $message, $personaOverride = null, $clinicName = '') {
+    if (!pf_clinical_capability_enabled($db, $clinicId, 'aiClinicalAdviceEnabled') && pf_ai_message_requests_clinical_guidance($message)) {
+        return pf_ai_operations_only_refusal($message);
+    }
+
     require_once __DIR__ . '/aiService.php';
     $persona = is_array($personaOverride)
         ? array_merge(air_persona_defaults($clinicId), $personaOverride)
@@ -359,7 +364,8 @@ function air_preview_reply($db, $clinicId, $message, $personaOverride = null, $c
         ['role' => 'system', 'content' => $system],
         ['role' => 'user', 'content' => (string)$message],
     ];
-    return ai_complete($db, $messages, ['maxTokens' => 260, 'temperature' => 0.5, 'clinicId' => $clinicId, 'purpose' => 'ai_receptionist_preview']);
+    $reply = ai_complete($db, $messages, ['maxTokens' => 260, 'temperature' => 0.5, 'clinicId' => $clinicId, 'purpose' => 'ai_receptionist_preview']);
+    return pf_ai_filter_operations_reply($message, $reply);
 }
 
 // ===================================================== Phase 4: lead engine ==
@@ -464,9 +470,8 @@ function air_create_appointment_from_lead($db, $clinicId, $client, $lead) {
 
     $id = generate_uuid();
     $notes = 'Booked by AI Receptionist' . (!empty($lead['treatmentInterest']) ? ' — interest: ' . $lead['treatmentInterest'] : '') . '.';
-    $qr = generate_qr_data_url($id, $client['name'] ?? 'Patient', $date, $time);
-    $db->prepare("INSERT INTO Appointment (id, clinicId, branchId, clientId, staffId, serviceId, date, startTime, endTime, duration, status, room, notes, price, specialty, qrCode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-       ->execute([$id, $clinicId, $staff['branchId'] ?? null, $client['id'], $staffId, null, $date, $time, $endTime, 30, 'pending', null, $notes, 0, $staff['specialty'] ?? 'general', $qr]);
+    $db->prepare("INSERT INTO Appointment (id, clinicId, branchId, clientId, staffId, serviceId, date, startTime, endTime, duration, status, room, notes, price, specialty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+       ->execute([$id, $clinicId, $staff['branchId'] ?? null, $client['id'], $staffId, null, $date, $time, $endTime, 30, 'pending', null, $notes, 0, $staff['specialty'] ?? 'general']);
     whatsapp_automation_dispatch_trigger($clinicId, 'appointment_booked', $id, $client['id']);
     return ['created' => true, 'appointmentId' => $id, 'date' => $date, 'startTime' => $time];
 }
@@ -474,6 +479,9 @@ function air_create_appointment_from_lead($db, $clinicId, $client, $lead) {
 // Orchestrate one inbound message: AI reply + remember facts + optional auto-book.
 function air_handle_message($db, $clinicId, $phone, $name, $message, $opts = []) {
     $clinicName = $opts['clinicName'] ?? '';
+    if (pf_ai_message_requests_clinical_guidance($message)) {
+        return ['reply' => pf_ai_operations_only_refusal($message), 'lead' => null, 'booking' => null];
+    }
     $reply = air_preview_reply($db, $clinicId, $message, null, $clinicName);
     $lead = air_extract_lead($db, $clinicId, $message);
 

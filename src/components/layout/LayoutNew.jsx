@@ -15,7 +15,7 @@ const mobileNav = [
   { to: '/reception', icon: ClipboardList, label: 'Desk' },
   { to: '/appointments', icon: Calendar, label: 'Appts' },
   { to: '/clients', icon: Users, label: 'Patients' },
-  { to: '/clinical', icon: Stethoscope, label: 'Clinical' },
+  { to: '/clinical', icon: Stethoscope, label: 'Operations' },
   { to: '/invoices', icon: Receipt, label: 'Bills' },
   { to: '/reports', icon: FileBarChart, label: 'Reports' },
 ];
@@ -28,7 +28,7 @@ export default function LayoutNew() {
   const dynamicMobileNav = mobileNav.map(item => {
     if (item.to === '/appointments') return { ...item, label: term('appointments', 'Appts') };
     if (item.to === '/clients') return { ...item, label: term('patients', 'Patients') };
-    if (item.to === '/clinical') return { ...item, label: term('clinicalWorkspace', 'Clinical') };
+    if (item.to === '/clinical') return { ...item, label: 'Operations' };
     return item;
   });
 

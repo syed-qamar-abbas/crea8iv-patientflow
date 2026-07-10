@@ -2,10 +2,15 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../services/dentalFinancialService.php';
+require_once __DIR__ . '/../services/clinicalSafetyPolicyService.php';
 
 // Structured treatment plan: one row per planned procedure for a patient
 // (procedure, tooth, cost, status). Kept flat for simplicity.
 class TreatmentController {
+    private function enforceClinicalWrite($db, $clinicId) {
+        pf_enforce_clinical_capability($db, $clinicId, 'treatmentProcedureEntryEnabled', 'Treatment and procedure entry is read-only until PatientFlow has a governed clinical record model.');
+    }
+
     private function ensureTable($db) {
         $sql = DB_DRIVER === 'sqlite'
             ? "CREATE TABLE IF NOT EXISTS TreatmentPlanItem (
@@ -62,6 +67,7 @@ class TreatmentController {
 
     public function create($input, $user, $clientId) {
         $db = DB::getConnection();
+        $this->enforceClinicalWrite($db, $user['clinicId']);
         $this->ensureTable($db);
         $this->assertClient($db, $clientId, $user['clinicId']);
         $procedure = trim((string)($input['procedure'] ?? ''));
@@ -81,6 +87,7 @@ class TreatmentController {
 
     public function update($input, $user, $id) {
         $db = DB::getConnection();
+        $this->enforceClinicalWrite($db, $user['clinicId']);
         $this->ensureTable($db);
         $stmt = $db->prepare("SELECT id FROM TreatmentPlanItem WHERE id = ? AND clinicId = ?");
         $stmt->execute([$id, $user['clinicId']]);
@@ -102,6 +109,7 @@ class TreatmentController {
 
     public function remove($input, $user, $id) {
         $db = DB::getConnection();
+        $this->enforceClinicalWrite($db, $user['clinicId']);
         $this->ensureTable($db);
         $stmt = $db->prepare("UPDATE TreatmentPlanItem SET status = 'archived' WHERE id = ? AND clinicId = ?");
         $stmt->execute([$id, $user['clinicId']]);
@@ -131,6 +139,7 @@ class TreatmentController {
 
     public function createDetail($input, $user, $clientId) {
         $db = DB::getConnection();
+        $this->enforceClinicalWrite($db, $user['clinicId']);
         $this->ensureDental($db);
         $this->assertClient($db, $clientId, $user['clinicId']);
 
@@ -185,6 +194,7 @@ class TreatmentController {
 
     public function updateDetail($input, $user, $id) {
         $db = DB::getConnection();
+        $this->enforceClinicalWrite($db, $user['clinicId']);
         $this->ensureDental($db);
         $stmt = $db->prepare("SELECT * FROM TreatmentProcedureDetail WHERE id = ? AND clinicId = ? AND archivedAt IS NULL");
         $stmt->execute([$id, $user['clinicId']]);
@@ -216,6 +226,7 @@ class TreatmentController {
 
     public function removeDetail($input, $user, $id) {
         $db = DB::getConnection();
+        $this->enforceClinicalWrite($db, $user['clinicId']);
         $this->ensureDental($db);
         $stmt = $db->prepare("UPDATE TreatmentProcedureDetail SET archivedAt = CURRENT_TIMESTAMP WHERE id = ? AND clinicId = ? AND archivedAt IS NULL");
         $stmt->execute([$id, $user['clinicId']]);

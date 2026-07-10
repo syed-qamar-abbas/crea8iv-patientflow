@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Archive, Loader2, PlayCircle, PauseCircle, CalendarPlus, Globe, ShieldCheck, Plus, Pencil, LogIn, Search, Copy, Check, X, Users as UsersIcon, Building2, CreditCard, Clock, MessageCircle, Bot, KeyRound, Megaphone, Facebook, Database } from 'lucide-react';
+import { Archive, Loader2, PlayCircle, PauseCircle, CalendarPlus, Globe, Plus, Pencil, LogIn, Search, Copy, Check, X, Users as UsersIcon, Building2, CreditCard, Clock, MessageCircle, Bot, KeyRound, Megaphone, Facebook, Database, Eye, EyeOff } from 'lucide-react';
 import { fetchApi } from '../../config/api';
 import Modal from '../../components/ui/Modal';
 import ColorPicker from '../../components/ui/ColorPicker';
@@ -148,7 +148,7 @@ export default function AdminTenants() {
   };
 
   const activate = (t) => {
-    const cycle = window.prompt('Billing cycle: type "monthly" (PKR 30,000) or "annual" (PKR 240,000)', 'monthly');
+    const cycle = window.prompt('Billing cycle: type "monthly" (default PKR 50,000) or "annual" (Starter yearly offer PKR 50,000 upfront)', 'monthly');
     if (!cycle || !['monthly', 'annual'].includes(cycle)) return;
     run(t.id, () => fetchApi(`/admin/tenants/${t.id}/activate`, { method: 'POST', body: JSON.stringify({ billingCycle: cycle }) }));
   };
@@ -165,15 +165,6 @@ export default function AdminTenants() {
     run(t.id, () => fetchApi(`/admin/tenants/${t.id}/extend`, { method: 'POST', body: JSON.stringify({ months }) }));
   };
 
-  const setDomain = (t) => {
-    const customDomain = window.prompt(
-      `White-label domain for "${t.name}" (e.g. portal.theirclinic.com). Leave blank to remove.`,
-      t.customDomain || ''
-    );
-    if (customDomain === null) return;
-    run(t.id, () => fetchApi(`/admin/tenants/${t.id}/domain`, { method: 'PUT', body: JSON.stringify({ customDomain }) }));
-  };
-
   const toggleGrowthFeature = (t, key) => {
     const next = !Number(t[key] || 0);
     run(t.id, async () => {
@@ -188,11 +179,6 @@ export default function AdminTenants() {
         }),
       });
     });
-  };
-
-  const markConnected = (t) => {
-    if (!window.confirm(`Mark ${t.customDomain} as connected?\n\nOnly do this AFTER you have:\n1. Pointed its DNS to the server\n2. Issued an SSL certificate in hosting\n3. Deployed the portal to its folder\n\nThis flips the platform record to "connected".`)) return;
-    run(t.id, () => fetchApi(`/admin/tenants/${t.id}/domain/ssl`, { method: 'PUT', body: JSON.stringify({ action: 'connect' }) }));
   };
 
   if (!tenants) {
@@ -331,10 +317,6 @@ export default function AdminTenants() {
                                 <button onClick={() => suspend(t)} title="Deactivate access" className={`${iconBtn} hover:text-rose-600`}><PauseCircle className="w-4 h-4" /></button>
                               )}
                               <button onClick={() => setEditTenant(t)} title="Edit clinic details" className={`${iconBtn} hover:text-orange-600`}><Pencil className="w-4 h-4" /></button>
-                              <button onClick={() => setDomain(t)} title="Set white-label domain" className={`${iconBtn} hover:text-orange-600`}><Globe className="w-4 h-4" /></button>
-                              {t.customDomain && t.domainStatus && !['none', 'connected'].includes(t.domainStatus) && (
-                                <button onClick={() => markConnected(t)} title="Mark domain connected (after DNS + SSL)" className={`${iconBtn} hover:text-emerald-600`}><ShieldCheck className="w-4 h-4" /></button>
-                              )}
                               {t.status !== 'archived' && (
                                 <button onClick={() => setDeleteTenant(t)} title="Archive clinic access" className={`${iconBtn} hover:text-rose-600`}><Archive className="w-4 h-4" /></button>
                               )}
@@ -573,6 +555,7 @@ function TenantAutomationControls({ tenantId }) {
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [showOwnerPassword, setShowOwnerPassword] = useState(false);
   const [err, setErr] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -663,6 +646,21 @@ function TenantAutomationControls({ tenantId }) {
     } catch (e) { setErr(e.message); } finally { setSaving(false); }
   };
 
+  const resetOwnerPassword = async () => {
+    if (!window.confirm('Generate a new owner password for this clinic? The existing owner password will stop working.')) return;
+    setSaving(true); setErr(''); setNotice('');
+    try {
+      const res = await fetchApi(`/admin/tenants/${tenantId}/owner-password`, { method: 'POST' });
+      setData((d) => ({ ...d, credentials: res.credentials }));
+      setShowOwnerPassword(true);
+      setNotice('Owner password generated and saved.');
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (!data || !draft) {
     return <section className="rounded-xl border border-gray-200/70 p-4 text-sm text-gray-400 dark:border-white/10"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Loading automation controls…</section>;
   }
@@ -701,6 +699,55 @@ function TenantAutomationControls({ tenantId }) {
             <option key={tpl.templateKey} value={tpl.templateKey}>{tpl.name}</option>
           ))}
         </select>
+      </div>
+      <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/5">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-300">Owner login credentials</p>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">Admin-visible owner login for handover and support.</p>
+          </div>
+          <button
+            onClick={resetOwnerPassword}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:border-orange-300 hover:text-orange-600 disabled:opacity-60 dark:border-white/10 dark:bg-slate-900 dark:text-gray-300"
+          >
+            <KeyRound className="h-3.5 w-3.5" /> Reset
+          </button>
+        </div>
+        <div className="grid gap-2">
+          <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-900">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Owner email</p>
+            <p className="break-all text-sm font-semibold text-gray-800 dark:text-gray-100">{data.credentials?.email || 'Not stored yet'}</p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-900">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Owner password</p>
+                <p className="break-all font-mono text-sm font-semibold text-gray-800 dark:text-gray-100">
+                  {data.credentials?.password
+                    ? (showOwnerPassword ? data.credentials.password : '************')
+                    : 'No stored password yet. Reset to generate one.'}
+                </p>
+              </div>
+              {data.credentials?.password && (
+                <button
+                  type="button"
+                  title={showOwnerPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowOwnerPassword((v) => !v)}
+                  className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-orange-600 dark:hover:bg-white/10"
+                >
+                  {showOwnerPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              )}
+            </div>
+            {data.credentials?.updatedAt && (
+              <p className="mt-1 text-[10px] text-gray-400">Last saved {String(data.credentials.updatedAt).slice(0, 16)}</p>
+            )}
+          </div>
+          {data.clinic?.slug && (
+            <p className="text-[11px] text-gray-400">Portal: crea8ivmedia.com/clinic/{data.clinic.slug}</p>
+          )}
+        </div>
       </div>
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -790,7 +837,7 @@ function TenantAutomationControls({ tenantId }) {
 function CreateClinicModal({ onClose, onCreated }) {
   const [f, setF] = useState({
     name: '', email: '', phone: '', clinicType: 'dental', address: '',
-    status: 'trial', trialDays: 14, customDomain: '',
+    status: 'trial', trialDays: 14,
     primaryColor: '#0f766e', secondaryColor: '#14b8a6',
     ownerName: '', ownerEmail: '', ownerPassword: '',
   });
@@ -804,11 +851,15 @@ function CreateClinicModal({ onClose, onCreated }) {
       const body = {
         name: f.name, email: f.email, phone: f.phone, clinicType: f.clinicType, address: f.address,
         status: f.status, trialDays: Number(f.trialDays) || 14,
-        customDomain: f.customDomain, primaryColor: f.primaryColor, secondaryColor: f.secondaryColor,
+        primaryColor: f.primaryColor, secondaryColor: f.secondaryColor,
         owner: { name: f.ownerName, email: f.ownerEmail || f.email, password: f.ownerPassword },
       };
       const res = await fetchApi('/admin/tenants', { method: 'POST', body: JSON.stringify(body) });
-      window.alert(res.message || 'Clinic created.');
+      if (res.ownerPassword) {
+        window.alert(`${res.message || 'Clinic created.'}\n\nOwner login\nEmail: ${res.ownerEmail}\nPassword: ${res.ownerPassword}`);
+      } else {
+        window.alert(res.message || 'Clinic created.');
+      }
       onCreated();
     } catch (e) {
       setErr(e.message);
@@ -833,7 +884,6 @@ function CreateClinicModal({ onClose, onCreated }) {
                 {CLINIC_TYPES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div><label className={labelCls}>Custom domain (optional)</label><input className={field} value={f.customDomain} onChange={(e) => set('customDomain', e.target.value)} placeholder="portal.clinic.com" /></div>
             <div className="sm:col-span-2"><label className={labelCls}>Address</label><input className={field} value={f.address} onChange={(e) => set('address', e.target.value)} /></div>
           </div>
         </section>
@@ -845,8 +895,8 @@ function CreateClinicModal({ onClose, onCreated }) {
             <div><label className={labelCls}>Owner login email *</label><input className={field} value={f.ownerEmail} onChange={(e) => set('ownerEmail', e.target.value)} placeholder="owner@clinic.com" /></div>
             <div className="sm:col-span-2">
               <label className={labelCls}>Initial password</label>
-              <input className={field} type="text" value={f.ownerPassword} onChange={(e) => set('ownerPassword', e.target.value)} placeholder="Leave blank to email a set-password invite" />
-              <p className="text-[11px] text-gray-400 mt-1">Set a password so the owner can log in immediately (min 10 chars), or leave blank to email them a secure set-password link.</p>
+              <input className={field} type="text" value={f.ownerPassword} onChange={(e) => set('ownerPassword', e.target.value)} placeholder="Leave blank to auto-generate" />
+              <p className="text-[11px] text-gray-400 mt-1">Set a password so the owner can log in immediately (min 10 chars), or leave blank to auto-generate an admin-visible temporary password.</p>
             </div>
           </div>
         </section>

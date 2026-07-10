@@ -15,8 +15,8 @@ const FEATURES = [
   },
   {
     icon: Users,
-    title: 'Patient Records',
-    desc: 'Complete dental charts, treatment history, and clinical notes in one place.',
+    title: 'Patient Operations',
+    desc: 'Searchable patient profiles, appointments, billing, and private operational documents.',
   },
   {
     icon: Receipt,
@@ -31,7 +31,7 @@ const FEATURES = [
   {
     icon: ShieldCheck,
     title: 'Role-Based Access',
-    desc: 'Owner, reception, and clinical roles each see exactly what they should.',
+    desc: 'Owner, reception, and operations roles each see exactly what they should.',
   },
 ];
 

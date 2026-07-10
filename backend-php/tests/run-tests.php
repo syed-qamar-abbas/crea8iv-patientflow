@@ -126,6 +126,18 @@ check('ai enables the AI flags', $pk['ai']['flags']['aiEnabled'] && $pk['ai']['f
 check('ai plan includes every starter module', !array_diff($pk['core']['modules'], $pk['ai']['modules']));
 
 // ---------------------------------------------------------------------------
+echo "== secure check-in integration ==\n";
+$focusedCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/checkin-token-tests.php');
+passthru($focusedCommand, $focusedStatus);
+check('focused secure check-in suite passes', $focusedStatus === 0);
+
+// ---------------------------------------------------------------------------
+echo "== operations-only safety integration ==\n";
+$safetyCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/clinical-safety-tests.php');
+passthru($safetyCommand, $safetyStatus);
+check('focused operations-only safety suite passes', $safetyStatus === 0);
+
+// ---------------------------------------------------------------------------
 echo "\n$pass passed, $fail failed\n";
 if ($fail) { echo 'FAILED: ' . implode(' | ', $failures) . "\n"; exit(1); }
 exit(0);

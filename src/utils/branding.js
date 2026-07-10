@@ -11,6 +11,10 @@ export function getLogoInitials(value, fallback = 'SE') {
     return fallback;
   }
 
+  const words = value.trim().split(/[^a-z0-9]+/i).filter(Boolean);
+  if (words.length > 1) {
+    return words.map((word) => word[0]).join('').slice(0, 4).toUpperCase();
+  }
   return value.trim().slice(0, 4).toUpperCase();
 }
 

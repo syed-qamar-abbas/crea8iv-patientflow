@@ -3,6 +3,13 @@ require_once __DIR__ . '/industryTemplateService.php';
 
 function tenant_features_ensure($db) {
     $columns = [
+        'operatingMode' => ['sqlite' => "TEXT NOT NULL DEFAULT 'operations_only'", 'mysql' => "VARCHAR(40) NOT NULL DEFAULT 'operations_only'"],
+        'clinicalRecordEnabled' => ['sqlite' => 'INTEGER NOT NULL DEFAULT 0', 'mysql' => 'TINYINT NOT NULL DEFAULT 0'],
+        'treatmentProcedureEntryEnabled' => ['sqlite' => 'INTEGER NOT NULL DEFAULT 0', 'mysql' => 'TINYINT NOT NULL DEFAULT 0'],
+        'medicalHistoryEntryEnabled' => ['sqlite' => 'INTEGER NOT NULL DEFAULT 0', 'mysql' => 'TINYINT NOT NULL DEFAULT 0'],
+        'patientImagePublicationEnabled' => ['sqlite' => 'INTEGER NOT NULL DEFAULT 0', 'mysql' => 'TINYINT NOT NULL DEFAULT 0'],
+        'aiClinicalAdviceEnabled' => ['sqlite' => 'INTEGER NOT NULL DEFAULT 0', 'mysql' => 'TINYINT NOT NULL DEFAULT 0'],
+        'clinicalPolicyVersion' => ['sqlite' => "TEXT NOT NULL DEFAULT 'operations-v1'", 'mysql' => "VARCHAR(40) NOT NULL DEFAULT 'operations-v1'"],
         'marketingEnabled' => ['sqlite' => 'INTEGER DEFAULT 0', 'mysql' => 'TINYINT DEFAULT 0'],
         'metaLeadsEnabled' => ['sqlite' => 'INTEGER DEFAULT 0', 'mysql' => 'TINYINT DEFAULT 0'],
         'importsEnabled' => ['sqlite' => 'INTEGER DEFAULT 0', 'mysql' => 'TINYINT DEFAULT 0'],
@@ -15,6 +22,13 @@ function tenant_features_ensure($db) {
         $db->exec("CREATE TABLE IF NOT EXISTS ClinicFeatureSetting (
             clinicId TEXT PRIMARY KEY,
             industryTemplate TEXT DEFAULT NULL,
+            operatingMode TEXT NOT NULL DEFAULT 'operations_only',
+            clinicalRecordEnabled INTEGER NOT NULL DEFAULT 0,
+            treatmentProcedureEntryEnabled INTEGER NOT NULL DEFAULT 0,
+            medicalHistoryEntryEnabled INTEGER NOT NULL DEFAULT 0,
+            patientImagePublicationEnabled INTEGER NOT NULL DEFAULT 0,
+            aiClinicalAdviceEnabled INTEGER NOT NULL DEFAULT 0,
+            clinicalPolicyVersion TEXT NOT NULL DEFAULT 'operations-v1',
             marketingEnabled INTEGER DEFAULT 0,
             metaLeadsEnabled INTEGER DEFAULT 0,
             importsEnabled INTEGER DEFAULT 0,
@@ -40,6 +54,13 @@ function tenant_features_ensure($db) {
         $db->exec("CREATE TABLE IF NOT EXISTS ClinicFeatureSetting (
             clinicId VARCHAR(64) PRIMARY KEY,
             industryTemplate VARCHAR(80) DEFAULT NULL,
+            operatingMode VARCHAR(40) NOT NULL DEFAULT 'operations_only',
+            clinicalRecordEnabled TINYINT NOT NULL DEFAULT 0,
+            treatmentProcedureEntryEnabled TINYINT NOT NULL DEFAULT 0,
+            medicalHistoryEntryEnabled TINYINT NOT NULL DEFAULT 0,
+            patientImagePublicationEnabled TINYINT NOT NULL DEFAULT 0,
+            aiClinicalAdviceEnabled TINYINT NOT NULL DEFAULT 0,
+            clinicalPolicyVersion VARCHAR(40) NOT NULL DEFAULT 'operations-v1',
             marketingEnabled TINYINT DEFAULT 0,
             metaLeadsEnabled TINYINT DEFAULT 0,
             importsEnabled TINYINT DEFAULT 0,
@@ -69,6 +90,13 @@ function tenant_features_defaults($clinicId) {
     return [
         'clinicId' => $clinicId,
         'industryTemplate' => INDUSTRY_TEMPLATE_DEFAULT,
+        'operatingMode' => 'operations_only',
+        'clinicalRecordEnabled' => 0,
+        'treatmentProcedureEntryEnabled' => 0,
+        'medicalHistoryEntryEnabled' => 0,
+        'patientImagePublicationEnabled' => 0,
+        'aiClinicalAdviceEnabled' => 0,
+        'clinicalPolicyVersion' => 'operations-v1',
         'marketingEnabled' => 0,
         'metaLeadsEnabled' => 0,
         'importsEnabled' => 0,
@@ -92,6 +120,16 @@ function tenant_features_get($db, $clinicId) {
     if (!$row) return tenant_features_defaults($clinicId);
     $merged = array_merge(tenant_features_defaults($clinicId), $row);
     if (empty($merged['industryTemplate'])) $merged['industryTemplate'] = INDUSTRY_TEMPLATE_DEFAULT;
+    // P0-2 Phase A is a hard product boundary, not a tenant-configurable flag.
+    // Keep every code path fail-closed even if a database value is changed
+    // manually or arrives through a future admin/package payload.
+    $merged['operatingMode'] = 'operations_only';
+    $merged['clinicalRecordEnabled'] = 0;
+    $merged['treatmentProcedureEntryEnabled'] = 0;
+    $merged['medicalHistoryEntryEnabled'] = 0;
+    $merged['patientImagePublicationEnabled'] = 0;
+    $merged['aiClinicalAdviceEnabled'] = 0;
+    $merged['clinicalPolicyVersion'] = 'operations-v1';
     return $merged;
 }
 

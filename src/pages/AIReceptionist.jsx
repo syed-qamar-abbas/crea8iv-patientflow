@@ -250,7 +250,7 @@ export default function AIReceptionist() {
               <Field label="Conversation rules" hint="Anything the AI must always / never do for your business">
                 <textarea rows={3} className={inputCls} value={persona.conversationRules} onChange={(e) => set({ conversationRules: e.target.value })} placeholder={`Always offer a clear next ${appointmentLabel}.\nNever quote custom pricing without team review.`} />
               </Field>
-              <Tip>Safety is built in: the AI never diagnoses, never promises results, and hands off to your team when unsure — you don't need to add those rules.</Tip>
+              <Tip>Operations-only safety is backend enforced: the AI handles appointments and clinic information, but refuses symptom assessment, triage, diagnosis, medication, dosage, and treatment advice.</Tip>
             </div>
           )}
 

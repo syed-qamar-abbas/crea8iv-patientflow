@@ -61,6 +61,17 @@ class AuthController {
         }
     }
 
+    private function clinicLogoInitials($name) {
+        $words = preg_split('/[^a-z0-9]+/i', trim((string)$name), -1, PREG_SPLIT_NO_EMPTY);
+        if (!$words) return 'CL';
+        $letters = '';
+        foreach ($words as $word) {
+            $letters .= strtoupper(substr($word, 0, 1));
+            if (strlen($letters) >= 4) break;
+        }
+        return $letters ?: 'CL';
+    }
+
     private function issueTokens($db, $dbUser) {
         $userPayload = [
             'id' => $dbUser['id'],
@@ -118,8 +129,8 @@ class AuthController {
             $db->beginTransaction();
 
             $clinicId = generate_uuid();
-            $stmt = $db->prepare("INSERT INTO Clinic (id, name) VALUES (?, ?)");
-            $stmt->execute([$clinicId, $clinicName]);
+            $stmt = $db->prepare("INSERT INTO Clinic (id, name, logo) VALUES (?, ?, ?)");
+            $stmt->execute([$clinicId, $clinicName, $this->clinicLogoInitials($clinicName)]);
 
             $userId = generate_uuid();
             $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);

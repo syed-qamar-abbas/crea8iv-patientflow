@@ -51,6 +51,12 @@
   PF.icon = icon;
 
   const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const annual = (p) => p.annualOffer ? `
+    <div class="pf-plan__annual">
+      <span>${esc(p.annualOffer.label)}</span>
+      <strong>${PF.fmtPrice(p.annualOffer.annualPricePKR)}<em>/year</em></strong>
+      <p>${esc(p.annualOffer.note)}</p>
+    </div>` : '';
 
   // ---- Renderers ---------------------------------------------------------
   const R = {
@@ -115,6 +121,7 @@
           <h3>${esc(p.name)}</h3>
           <p class="pf-plan__tag">${esc(p.tagline)}</p>
           <div class="pf-plan__price">${PF.fmtPrice(p.pricePKR)}<span>/${p.period}</span></div>
+          ${annual(p)}
           <ul class="pf-plan__list">
             ${shown.map(f => `<li>${icon('check')} ${esc(f.name)}</li>`).join('')}
             ${feats.length > shown.length ? `<li class="pf-plan__more">+ ${feats.length - shown.length} more</li>` : ''}
@@ -131,7 +138,7 @@
     compare(el) {
       el.innerHTML = `
         <table class="pf-compare">
-          <thead><tr><th>Feature</th>${PF.planList.map(p => `<th>${esc(p.name)}<span>${PF.fmtPrice(p.pricePKR)}/mo</span></th>`).join('')}</tr></thead>
+          <thead><tr><th>Feature</th>${PF.planList.map(p => `<th>${esc(p.name)}<span>${PF.fmtPrice(p.pricePKR)}/mo${p.annualOffer ? ' · annual available' : ''}</span></th>`).join('')}</tr></thead>
           <tbody>
             ${PF.CATEGORIES.map(cat => {
               const rows = PF.FEATURES.filter(f => f.category === cat.id);

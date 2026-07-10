@@ -2,7 +2,7 @@
 
 # Crea8iv PatientFlow
 
-**A multi-tenant clinic management platform — appointments, patients, billing, clinical records, inventory, marketing automation, and an AI receptionist, served to many clinics from a single codebase.**
+**A multi-tenant clinic operations platform — appointments, operational patient profiles, billing, inventory, marketing automation, and an administrative AI receptionist, served to many clinics from a single codebase.**
 
 [![Status](https://img.shields.io/badge/status-production-success)]()
 [![Frontend](https://img.shields.io/badge/frontend-React%2018%20%2B%20Vite%205-61dafb)]()
@@ -40,6 +40,8 @@
 
 Crea8iv PatientFlow is a **SaaS clinic-management platform** built for dental, aesthetic, and general medical clinics. A single deployment serves many independent clinics (**tenants**), each with isolated data, its own branding, its own staff, and its own portal URL.
 
+> **Product safety boundary:** PatientFlow currently operates in `operations_only` mode. It is not an EHR/EMR or authoritative clinical record. Treatment/procedure and medical-history writes, public patient-image publication, and AI clinical advice are disabled. See [Product Boundary](docs/PRODUCT_BOUNDARY.md).
+
 The platform has three audiences:
 
 | Surface | Who uses it | Where it lives |
@@ -58,8 +60,8 @@ Tenancy is **path-based by default** — every clinic is reachable at `https://<
 
 **Core (every plan)**
 - 📅 **Appointments** — calendar, scheduling, conflict detection, reschedule, reminders
-- 🧑‍⚕️ **Patients/Clients** — records, documents, searchable typeahead (name/phone/email/patient-no)
-- 🦷 **Clinical** — dental charting (FDI tooth picker), treatment plans, per-procedure details & costs
+- 🧑‍⚕️ **Patients/Clients** — operational profiles, private documents, searchable typeahead (name/phone/email/patient-no)
+- 🦷 **Historical clinical-like data** — preserved as read-only reference data; not a complete or authoritative clinical record
 - 💳 **Billing** — invoices with PDF generation, packages, refunds, patient balances, **clinic bank/payment details on every invoice**
 - 🧾 **Financials** — expenses, procedure costs, profit/margin reporting
 - 📦 **Inventory** — stock items and transactions
@@ -167,7 +169,8 @@ For request flow, authentication flow, and database relationships in detail, see
 
 ### Prerequisites
 - **Node.js** 18+ and npm (frontend)
-- **PHP** 8.1+ with `pdo_mysql` (or `pdo_sqlite` for local dev) and `iconv`
+- **PHP** 8.3 with `pdo_mysql` (or `pdo_sqlite` for local dev), `iconv`, and `mbstring`
+- **Composer** 2.x for the locally rendered, PHI-free check-in QR dependency
 - **MySQL** 8 (production) — or SQLite for local development
 
 ### 1. Clone & install frontend
@@ -186,6 +189,7 @@ cp .env.example .env
 ### 3. Configure the backend
 ```bash
 cd backend-php
+composer install --no-dev --prefer-dist --optimize-autoloader
 cp .env.example .env
 # Fill in DB_* and generate the two JWT secrets:
 php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"   # run twice
@@ -252,7 +256,7 @@ The full annotated template is in [`backend-php/.env.example`](backend-php/.env.
 
 ## Build & Deployment
 
-Production runs on **Hostinger shared hosting (LiteSpeed)**. There is **no CI/CD pipeline** — deployment is a manual `rsync`/`scp` over SSH. The full runbook is in [docs/HOSTINGER_DEPLOYMENT.md](docs/HOSTINGER_DEPLOYMENT.md).
+Production currently runs on **Hostinger shared hosting (LiteSpeed)**. GitHub Actions runs backend tests, builds both portal bundles, deploys them by `rsync` over SSH, and performs basic live hash/health checks. The current-host runbook is in [docs/HOSTINGER_DEPLOYMENT.md](docs/HOSTINGER_DEPLOYMENT.md); the approved migration direction is documented in [ADR-003](docs/INFRASTRUCTURE_MIGRATION_ADR.md).
 
 ### Frontend — dual build
 The portal is built **twice** because it is served from two base paths:
@@ -268,7 +272,14 @@ npm run build -- --base=/
 ```
 
 ### Backend
-The PHP app deploys by copying `backend-php/` to the server's `app/` directory. Files **excluded** from deploys: `.env`, `uploads/`, `logs/`, `backups/`. **The MySQL database is never touched by file deploys.**
+Install the locked production dependencies before packaging the PHP app:
+
+```bash
+cd backend-php
+composer install --no-dev --prefer-dist --optimize-autoloader
+```
+
+The PHP app deploys by copying `backend-php/` (including the generated `vendor/` directory) to the server's `app/` directory. Files **excluded** from deploys: `.env`, `uploads/`, `logs/`, `backups/`. **The MySQL database is never touched by file deploys.** Apply the additive secure-check-in-token migration before enabling QR issuance.
 
 ### Safety net (`pf-safe`)
 The server keeps a `pf-safe/` self-heal copy of the app, portal, and `.htaccess` plus periodic DB dumps, so an accidental overwrite by the co-hosted marketing site auto-recovers. See the deployment runbook.
@@ -292,8 +303,8 @@ Seven clinic roles plus the platform super-admin. Access is enforced **on both e
 | --- | --- |
 | **owner** | Everything in the clinic (all modules, settings, staff, financials) |
 | **manager** | Almost everything except owner-only controls |
-| **doctor** | Appointments, patients, clinical, lab |
-| **therapist** | Appointments, patients, clinical, lab |
+| **doctor** | Appointments, patients, operations workspace, lab |
+| **therapist** | Appointments, patients, operations workspace, lab |
 | **accountant** | Financials, invoices, reports |
 | **receptionist** | Reception desk, appointments, patients, invoices (incl. refunds) |
 | **staff** | Limited operational access |
@@ -322,7 +333,7 @@ Seven clinic roles plus the platform super-admin. Access is enforced **on both e
 | Patients | `/clients` | list, create, documents, search |
 | Appointments | `/appointments` | list, today, conflicts, reschedule |
 | Billing | `/invoices` | list, create, PDF, refund |
-| Clinical | `/treatment-plan`, `/treatment-details` | plans, per-procedure details |
+| Historical treatment | `/treatment-plan`, `/treatment-details` | read-only plans and procedure details in `operations-v1` |
 | Financials | `/financials`, `/expenses` | expenses, P&L |
 | Inventory | `/inventory` | items, transactions |
 | Staff/Users | `/staff`, `/users` | staff records, user accounts |
@@ -350,7 +361,7 @@ Key tables:
 | Tenancy & access | `Clinic`, `User`, `RefreshToken`, `ClinicFeatureSetting`, `IndustryTemplate`, `PublicSiteConfig`, `AuditLog` |
 | Scheduling & patients | `Appointment`, `Client`, `Staff`, `Branch` |
 | Billing & finance | `Invoice`, `InvoiceProcedureCost`, `Package`, `PackageItem`, `ClientPackage`, `Expense`, `ExpenseCategory` |
-| Clinical | `TreatmentProcedureDetail`, `Service` |
+| Historical treatment reference | `TreatmentProcedureDetail`, `Service` |
 | Operations | `InventoryItem`, `InventoryTransaction`, `GalleryItem`, `Feedback`, `Notification`, `Campaign` |
 
 Full relationships are documented in [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md#database-relationships).
@@ -394,8 +405,8 @@ Indicative direction (not commitments). Items already stubbed in code are marked
 - **Online payments** (JazzCash / Easypaisa) for invoices
 - **Automated SSL provisioning** via Cloudflare custom hostnames *(stub in `services/sslProvider.php`)*
 - **Advanced analytics** and cohort reporting
-- **CI/CD pipeline** to replace manual `rsync` deploys
-- **Automated test suite** (currently none — see [CONTRIBUTING.md](CONTRIBUTING.md))
+- **Immutable, health-gated deployments** to replace direct live-directory `rsync`
+- **Expanded automated coverage** for migrations, backups, tenant isolation, permissions, billing, and recovery
 - **Database history hygiene** — remove the legacy tracked dev DB from history (see [SECURITY.md](SECURITY.md))
 
 ---
@@ -411,6 +422,9 @@ Indicative direction (not commitments). Items already stubbed in code are marked
 | [SECURITY.md](SECURITY.md) | Security policy, reporting, known items |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community expectations |
 | [docs/HOSTINGER_DEPLOYMENT.md](docs/HOSTINGER_DEPLOYMENT.md) | Step-by-step production deployment runbook |
+| [docs/INFRASTRUCTURE_MIGRATION_ADR.md](docs/INFRASTRUCTURE_MIGRATION_ADR.md) | Staged architecture for 10, 100, 1,000, and 10,000 clinics |
+| [docs/INFRASTRUCTURE_MIGRATION_RUNBOOK.md](docs/INFRASTRUCTURE_MIGRATION_RUNBOOK.md) | Dependency-ordered migration, cutover, rollback, backup, and DR runbook |
+| [docs/PRODUCT_BOUNDARY.md](docs/PRODUCT_BOUNDARY.md) | Operations-only product and clinical-safety boundary |
 | [docs/WHITELABEL_DOMAINS.md](docs/WHITELABEL_DOMAINS.md) | Path-based + custom-domain tenancy |
 | [docs/CREA8IV_PATIENTFLOW_PLAN.md](docs/CREA8IV_PATIENTFLOW_PLAN.md) | Original architecture/transformation plan |
 

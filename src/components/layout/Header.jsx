@@ -31,7 +31,7 @@ const pageTitles = {
   '/reception': 'Reception Desk',
   '/appointments': 'Appointments',
   '/clients': 'Patients',
-  '/clinical': 'Clinical Workspace',
+  '/clinical': 'Operations Workspace',
   '/staff': 'Staff',
   '/services': 'Services',
   '/financials': 'Financials',
@@ -107,8 +107,10 @@ function timeAgo(value) {
   return `${days}d ago`;
 }
 
+const money = (value) => `PKR ${Number(value || 0).toLocaleString('en-US')}`;
+
 export default function Header() {
-  const { clinicInfo, industryTemplate } = useClinic();
+  const { clinicInfo, features, industryTemplate } = useClinic();
   const { darkMode, toggleDark } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
@@ -121,6 +123,11 @@ export default function Header() {
 
   const user = getCurrentUser();
   const role = getCurrentRole();
+  const subscription = features.subscription;
+  const packageInfo = features.package || {};
+  const planName = subscription?.packageName || packageInfo.name || 'Starter';
+  const planCycle = subscription?.billingCycle || 'monthly';
+  const planAmount = subscription?.amountPKR || packageInfo.pricePKR || 0;
 
   const pathParts = location.pathname.split('/').filter(Boolean);
   const titleForPath = (path) => {
@@ -205,6 +212,15 @@ export default function Header() {
             placeholder="Search patients, appointments..."
             className="premium-input pl-9 pr-4 py-2 rounded-lg text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 w-72"
           />
+        </div>
+
+        {/* Subscription plan */}
+        <div className="hidden lg:flex items-center gap-2 rounded-lg border border-gray-200/60 bg-white/70 px-3 py-1.5 shadow-sm dark:border-white/10 dark:bg-white/5">
+          <CreditCard className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
+          <div className="leading-tight">
+            <p className="text-[10px] font-bold text-gray-700 dark:text-gray-200">{planName}</p>
+            <p className="text-[9px] font-semibold capitalize text-gray-400 dark:text-gray-500">{money(planAmount)} / {planCycle}</p>
+          </div>
         </div>
 
         {/* Dark mode toggle */}

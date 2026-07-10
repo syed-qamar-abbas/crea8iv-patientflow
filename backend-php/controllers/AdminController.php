@@ -5,8 +5,8 @@ require_once __DIR__ . '/../services/mailService.php';
 require_once __DIR__ . '/../services/metaWhatsAppService.php';
 require_once __DIR__ . '/../services/tenantFeatureService.php';
 
-const PLAN_MONTHLY_PKR = 30000;
-const PLAN_ANNUAL_PKR  = 240000; // 20,000/month billed yearly
+const PLAN_MONTHLY_PKR = 50000;
+const PLAN_ANNUAL_PKR  = 50000; // Starter yearly offer, billed fully in advance
 
 class AdminController {
     private function ensureAiProviderSettings($db) {
@@ -168,6 +168,75 @@ class AdminController {
         }
     }
 
+    private function clinicLogoInitials($name) {
+        $words = preg_split('/[^a-z0-9]+/i', trim((string)$name), -1, PREG_SPLIT_NO_EMPTY);
+        if (!$words) return 'CL';
+        $letters = '';
+        foreach ($words as $word) {
+            $letters .= strtoupper(substr($word, 0, 1));
+            if (strlen($letters) >= 4) break;
+        }
+        return $letters ?: 'CL';
+    }
+
+    private function generateTenantPassword() {
+        return 'PF-' . strtoupper(bin2hex(random_bytes(3))) . '-' . strtoupper(bin2hex(random_bytes(3))) . '!';
+    }
+
+    private function credentialStorageKey($clinicId) {
+        return 'tenant_owner_password_' . $clinicId;
+    }
+
+    private function storeOwnerCredential($db, $clinicId, $ownerId, $email, $password) {
+        $this->ensurePlatformSettings($db);
+        $payload = json_encode([
+            'userId' => $ownerId,
+            'email' => strtolower(trim((string)$email)),
+            'password' => (string)$password,
+            'updatedAt' => date('Y-m-d H:i:s'),
+        ]);
+        $sql = DB_DRIVER === 'sqlite'
+            ? "INSERT INTO PlatformSetting (settingKey, settingValue) VALUES (?, ?) ON CONFLICT(settingKey) DO UPDATE SET settingValue=excluded.settingValue, updatedAt=CURRENT_TIMESTAMP"
+            : "INSERT INTO PlatformSetting (settingKey, settingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE settingValue=VALUES(settingValue), updatedAt=CURRENT_TIMESTAMP";
+        $db->prepare($sql)->execute([$this->credentialStorageKey($clinicId), $payload]);
+    }
+
+    private function getOwnerCredential($db, $clinicId) {
+        $this->ensurePlatformSettings($db);
+        $stmt = $db->prepare("SELECT settingValue FROM PlatformSetting WHERE settingKey = ?");
+        $stmt->execute([$this->credentialStorageKey($clinicId)]);
+        $saved = $stmt->fetchColumn();
+        $credential = $saved ? (json_decode($saved, true) ?: []) : [];
+
+        $stmt = $db->prepare(
+            "SELECT id, email FROM User WHERE clinicId = ? AND isActive = 1
+             ORDER BY (role = 'owner') DESC, createdAt ASC LIMIT 1"
+        );
+        $stmt->execute([$clinicId]);
+        $owner = $stmt->fetch() ?: [];
+
+        return [
+            'userId' => $credential['userId'] ?? ($owner['id'] ?? null),
+            'email' => $credential['email'] ?? ($owner['email'] ?? ''),
+            'password' => $credential['password'] ?? null,
+            'updatedAt' => $credential['updatedAt'] ?? null,
+        ];
+    }
+
+    private function ownerPasswordEmailHtml($name, $email, $password) {
+        $loginUrl = rtrim(CLIENT_URL, '/') . '/login';
+        $safeName = htmlspecialchars($name ?: 'Clinic owner', ENT_QUOTES, 'UTF-8');
+        $safeEmail = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+        $safePassword = htmlspecialchars($password, ENT_QUOTES, 'UTF-8');
+        $safeLoginUrl = htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8');
+        return "<div style=\"font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#0f172a;line-height:1.6\">
+  <h2>Your clinic portal is ready</h2>
+  <p>Hi {$safeName}, your owner account has been created.</p>
+  <p><strong>Login:</strong> <a href=\"{$safeLoginUrl}\">{$safeLoginUrl}</a><br><strong>Email:</strong> {$safeEmail}<br><strong>Temporary password:</strong> {$safePassword}</p>
+  <p style=\"color:#64748b;font-size:13px;\">Please sign in and change this password from your profile/settings when convenient.</p>
+</div>";
+    }
+
     // ------------------------------------------------------------------
     // Dashboard stats
     // ------------------------------------------------------------------
@@ -296,7 +365,7 @@ class AdminController {
 
     public function getTenantAutomation($input, $user, $id) {
         $db = DB::getConnection();
-        $stmt = $db->prepare("SELECT id, name FROM Clinic WHERE id = ? AND id != 'platform'");
+        $stmt = $db->prepare("SELECT id, name, slug, customDomain FROM Clinic WHERE id = ? AND id != 'platform'");
         $stmt->execute([$id]);
         $clinic = $stmt->fetch();
         if (!$clinic) send_error('Tenant not found', 404);
@@ -327,6 +396,33 @@ class AdminController {
             'packages' => array_values(pf_packages()),
             'industryTemplates' => industry_templates_list($db),
             'industryTemplate' => industry_template_get($db, $features['industryTemplate'] ?? INDUSTRY_TEMPLATE_DEFAULT),
+            'credentials' => $this->getOwnerCredential($db, $id),
+        ]);
+    }
+
+    public function resetTenantOwnerPassword($input, $user, $id) {
+        $db = DB::getConnection();
+        $clinicStmt = $db->prepare("SELECT id FROM Clinic WHERE id = ? AND id != 'platform'");
+        $clinicStmt->execute([$id]);
+        if (!$clinicStmt->fetch()) send_error('Tenant not found', 404);
+
+        $stmt = $db->prepare(
+            "SELECT id, name, email FROM User WHERE clinicId = ? AND isActive = 1
+             ORDER BY (role = 'owner') DESC, createdAt ASC LIMIT 1"
+        );
+        $stmt->execute([$id]);
+        $owner = $stmt->fetch();
+        if (!$owner) send_error('This clinic has no active owner user to reset.', 404);
+
+        $password = $this->generateTenantPassword();
+        $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+        $db->prepare("UPDATE User SET password = ? WHERE id = ?")->execute([$hash, $owner['id']]);
+        $this->storeOwnerCredential($db, $id, $owner['id'], $owner['email'], $password);
+
+        log_audit($id, $user['id'], 'tenant_owner_password_reset', 'User', $owner['id'], null, ['email' => $owner['email']]);
+        send_json([
+            'message' => 'Owner password generated and saved.',
+            'credentials' => $this->getOwnerCredential($db, $id),
         ]);
     }
 
@@ -675,7 +771,7 @@ class AdminController {
     }
 
     // Full clinic provisioning from the superadmin: clinic details + initial
-    // owner account (password set directly, or a set-password invite emailed)
+    // owner account (password set directly, or auto-generated for handover)
     // + optional custom domain + branding colors + initial status.
     public function createTenant($input, $user) {
         $db = DB::getConnection();
@@ -697,6 +793,8 @@ class AdminController {
         if ($name === '') send_error('Clinic name is required', 400);
         if ($ownerEmail === '' || !filter_var($ownerEmail, FILTER_VALIDATE_EMAIL)) send_error('A valid owner email is required', 400);
         if ($ownerName === '') $ownerName = $name . ' Owner';
+        $passwordWasGenerated = trim($ownerPassword) === '';
+        if ($passwordWasGenerated) $ownerPassword = $this->generateTenantPassword();
         if ($ownerPassword !== '' && strlen($ownerPassword) < 10) send_error('Owner password must be at least 10 characters', 400);
 
         $stmt = $db->prepare("SELECT id FROM User WHERE email = ?");
@@ -704,9 +802,7 @@ class AdminController {
         if ($stmt->fetch()) send_error('A user with this email already exists', 409);
 
         $customDomain = $this->normalizeDomain($db, $input['customDomain'] ?? '', null);
-
-        $sendInvite = ($ownerPassword === '');
-        $rawToken = null;
+        $this->ensurePlatformSettings($db);
 
         try {
             $db->beginTransaction();
@@ -720,24 +816,16 @@ class AdminController {
             // Every clinic is reachable at crea8ivmedia.com/clinic/<slug> (path-based,
             // valid SSL, zero setup). customDomain stays empty unless the operator
             // assigns a real domain the clinic owns.
-            $db->prepare("INSERT INTO Clinic (id, name, email, phone, address, status, clinicType, slug, primaryColor, secondaryColor, trialEndsAt, customDomain, domainStatus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-               ->execute([$clinicId, $name, $email, $phone, $address, $status, $clinicType, $slug,
+            $db->prepare("INSERT INTO Clinic (id, name, logo, email, phone, address, status, clinicType, slug, primaryColor, secondaryColor, trialEndsAt, customDomain, domainStatus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+               ->execute([$clinicId, $name, $this->clinicLogoInitials($name), $email, $phone, $address, $status, $clinicType, $slug,
                           $primaryColor, $secondaryColor, $trialEndsAt,
                           $customDomain, $customDomain ? 'pending' : 'none']);
 
             $ownerId = generate_uuid();
-            $hash = $sendInvite
-                ? password_hash(bin2hex(random_bytes(24)), PASSWORD_BCRYPT, ['cost' => 12])
-                : password_hash($ownerPassword, PASSWORD_BCRYPT, ['cost' => 12]);
+            $hash = password_hash($ownerPassword, PASSWORD_BCRYPT, ['cost' => 12]);
             $db->prepare("INSERT INTO User (id, clinicId, name, email, password, role) VALUES (?, ?, ?, ?, ?, 'owner')")
                ->execute([$ownerId, $clinicId, $ownerName, $ownerEmail, $hash]);
-
-            if ($sendInvite) {
-                $rawToken = bin2hex(random_bytes(32));
-                $db->prepare("INSERT INTO PasswordReset (id, userId, tokenHash, expiresAt) VALUES (?, ?, ?, ?)")
-                   ->execute([generate_uuid(), $ownerId, hash('sha256', $rawToken),
-                              date('Y-m-d H:i:s', time() + 72 * 3600)]);
-            }
+            $this->storeOwnerCredential($db, $clinicId, $ownerId, $ownerEmail, $ownerPassword);
 
             $db->commit();
         } catch (Exception $e) {
@@ -746,22 +834,20 @@ class AdminController {
             send_error('Clinic creation failed', 500);
         }
 
-        if ($sendInvite) {
-            $setupUrl = rtrim(CLIENT_URL, '/') . '/reset-password?token=' . $rawToken;
-            send_app_email($ownerEmail, 'Your clinic portal is ready — set your password',
-                           password_reset_email_html($ownerName, $setupUrl, 72 * 60));
+        if ($passwordWasGenerated) {
+            send_app_email($ownerEmail, 'Your clinic portal is ready',
+                           $this->ownerPasswordEmailHtml($ownerName, $ownerEmail, $ownerPassword));
         }
 
         log_audit($clinicId, $user['id'], 'tenant_created', 'Clinic', $clinicId, null,
-                  ['slug' => $slug, 'status' => $status, 'ownerEmail' => $ownerEmail, 'invite' => $sendInvite]);
+                  ['slug' => $slug, 'status' => $status, 'ownerEmail' => $ownerEmail, 'generatedPassword' => $passwordWasGenerated]);
 
         send_json([
-            'message'  => $sendInvite
-                ? 'Clinic created. A set-password invite was emailed to the owner.'
-                : 'Clinic created. The owner can log in immediately with the password you set.',
+            'message'  => 'Clinic created. The owner password is available in Growth settings.',
             'clinicId' => $clinicId,
             'slug'     => $slug,
             'ownerEmail' => $ownerEmail,
+            'ownerPassword' => $ownerPassword,
         ], 201);
     }
 
@@ -907,6 +993,9 @@ class AdminController {
         $stmt->execute([$lead['email']]);
         if ($stmt->fetch()) send_error('A user with this email already exists', 409);
 
+        $ownerPassword = $this->generateTenantPassword();
+        $this->ensurePlatformSettings($db);
+
         try {
             $db->beginTransaction();
 
@@ -914,21 +1003,15 @@ class AdminController {
             $slug = $this->slugify($db, $lead['clinicName']);
             // Created as 'pending' — activate (after payment) flips it on. Reachable
             // at crea8ivmedia.com/clinic/<slug>; no custom domain unless assigned later.
-            $db->prepare("INSERT INTO Clinic (id, name, phone, email, status, clinicType, slug) VALUES (?, ?, ?, ?, 'pending', ?, ?)")
-               ->execute([$clinicId, $lead['clinicName'], $lead['phone'], $lead['email'],
+            $db->prepare("INSERT INTO Clinic (id, name, logo, phone, email, status, clinicType, slug) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)")
+               ->execute([$clinicId, $lead['clinicName'], $this->clinicLogoInitials($lead['clinicName']), $lead['phone'], $lead['email'],
                           $lead['clinicType'] ?: 'dental', $slug]);
 
             $ownerId = generate_uuid();
-            // Unusable random password; the owner sets their own via the invite link
-            $randomHash = password_hash(bin2hex(random_bytes(24)), PASSWORD_BCRYPT, ['cost' => 12]);
+            $randomHash = password_hash($ownerPassword, PASSWORD_BCRYPT, ['cost' => 12]);
             $db->prepare("INSERT INTO User (id, clinicId, name, email, password, role) VALUES (?, ?, ?, ?, ?, 'owner')")
                ->execute([$ownerId, $clinicId, $lead['contactName'], $lead['email'], $randomHash]);
-
-            // Set-password invite (72h, single-use, same machinery as forgot-password)
-            $rawToken = bin2hex(random_bytes(32));
-            $db->prepare("INSERT INTO PasswordReset (id, userId, tokenHash, expiresAt) VALUES (?, ?, ?, ?)")
-               ->execute([generate_uuid(), $ownerId, hash('sha256', $rawToken),
-                          date('Y-m-d H:i:s', time() + 72 * 3600)]);
+            $this->storeOwnerCredential($db, $clinicId, $ownerId, $lead['email'], $ownerPassword);
 
             $db->prepare("UPDATE RegistrationLead SET status = 'converted', clinicId = ?, updatedAt = ? WHERE id = ?")
                ->execute([$clinicId, date('Y-m-d H:i:s'), $id]);
@@ -940,20 +1023,21 @@ class AdminController {
             send_error('Conversion failed', 500);
         }
 
-        $setupUrl = rtrim(CLIENT_URL, '/') . '/reset-password?token=' . $rawToken;
         send_app_email(
             $lead['email'],
-            'Your clinic portal is ready — set your password',
-            password_reset_email_html($lead['contactName'], $setupUrl, 72 * 60)
+            'Your clinic portal is ready',
+            $this->ownerPasswordEmailHtml($lead['contactName'], $lead['email'], $ownerPassword)
         );
 
         log_audit($clinicId, $user['id'], 'lead_converted', 'RegistrationLead', $id, null,
                   ['clinicId' => $clinicId, 'slug' => $slug]);
 
         send_json([
-            'message' => 'Clinic created (pending activation). Set-password link emailed to the owner.',
+            'message' => 'Clinic created (pending activation). Owner password is available in Growth settings.',
             'clinicId' => $clinicId,
             'slug' => $slug,
+            'ownerEmail' => $lead['email'],
+            'ownerPassword' => $ownerPassword,
         ], 201);
     }
 

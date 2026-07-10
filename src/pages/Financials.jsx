@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, BarChart3, DollarSign, Download, FileText, Loader2, Plus,
-  Receipt, Save, TrendingDown, TrendingUp, Upload
+  Pencil, Receipt, Save, Trash2, TrendingDown, TrendingUp, Upload, X
 } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Badge from '../components/ui/Badge';
@@ -15,6 +15,9 @@ const today = () => new Date().toISOString().slice(0, 10);
 const monthStart = () => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
 const monthEnd = () => new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10);
 const fileBase = API_URL.replace(/\/api\/v1\/?$/, '');
+const emptyExpenseForm = (categoryId = '') => ({
+  categoryId, branchId: '', description: '', amount: '', expenseDate: today(), paymentMethod: 'Cash', receipt: null,
+});
 
 function SummaryCard({ label, value, helper, icon: Icon, tone }) {
   return (
@@ -53,9 +56,8 @@ export default function Financials() {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('');
   const [procedureRows, setProcedureRows] = useState([]);
   const [range, setRange] = useState({ from: monthStart(), to: monthEnd() });
-  const [expenseForm, setExpenseForm] = useState({
-    categoryId: '', branchId: '', description: '', amount: '', expenseDate: today(), paymentMethod: 'Cash', receipt: null,
-  });
+  const [expenseForm, setExpenseForm] = useState(() => emptyExpenseForm());
+  const [editingExpenseId, setEditingExpenseId] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [editingCats, setEditingCats] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -117,22 +119,58 @@ export default function Financials() {
     setSaving(true);
     setError('');
     try {
-      const fd = new FormData();
-      Object.entries(expenseForm).forEach(([key, value]) => {
-        if (key === 'receipt') {
-          if (value) fd.append('receipt', value);
-        } else {
-          fd.append(key, value || '');
-        }
-      });
-      await fetchApi('/expenses', { method: 'POST', body: fd });
-      setExpenseForm({ categoryId: categories[0]?.id || '', branchId: '', description: '', amount: '', expenseDate: today(), paymentMethod: 'Cash', receipt: null });
+      if (editingExpenseId) {
+        await fetchApi(`/expenses/${editingExpenseId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            categoryId: expenseForm.categoryId || null,
+            branchId: expenseForm.branchId || null,
+            description: expenseForm.description,
+            amount: Number(expenseForm.amount),
+            expenseDate: expenseForm.expenseDate,
+            paymentMethod: expenseForm.paymentMethod || null,
+          }),
+        });
+      } else {
+        const fd = new FormData();
+        Object.entries(expenseForm).forEach(([key, value]) => {
+          if (key === 'receipt') {
+            if (value) fd.append('receipt', value);
+          } else {
+            fd.append(key, value || '');
+          }
+        });
+        await fetchApi('/expenses', { method: 'POST', body: fd });
+      }
+      setEditingExpenseId('');
+      setExpenseForm(emptyExpenseForm(categories[0]?.id || ''));
       await load();
     } catch (err) {
       setError(err.message || 'Expense could not be saved.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const startEditExpense = (expense) => {
+    setEditingExpenseId(expense.id);
+    setExpenseForm({
+      categoryId: categories.some(cat => String(cat.id) === String(expense.categoryId)) ? expense.categoryId : '',
+      branchId: expense.branchId || '',
+      description: expense.description || '',
+      amount: String(expense.amount ?? ''),
+      expenseDate: expense.expenseDate || today(),
+      paymentMethod: expense.paymentMethod || 'Cash',
+      receipt: null,
+    });
+    setError('');
+    requestAnimationFrame(() => document.getElementById('expense-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+
+  const cancelExpenseEdit = () => {
+    setEditingExpenseId('');
+    setExpenseForm(emptyExpenseForm(categories[0]?.id || ''));
+    setError('');
   };
 
   const renameCategory = async (cat) => {
@@ -177,10 +215,19 @@ export default function Financials() {
     }
   };
 
-  const archiveExpense = async (expense) => {
-    if (!window.confirm(`Archive expense "${expense.description}"?`)) return;
-    await fetchApi(`/expenses/${expense.id}`, { method: 'DELETE' });
-    await load();
+  const deleteExpense = async (expense) => {
+    if (!window.confirm(`Delete expense "${expense.description}"? It will be removed from reports but retained in audit history.`)) return;
+    setSaving(true);
+    setError('');
+    try {
+      await fetchApi(`/expenses/${expense.id}`, { method: 'DELETE' });
+      if (editingExpenseId === expense.id) cancelExpenseEdit();
+      await load();
+    } catch (err) {
+      setError(err.message || 'Expense could not be deleted.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveProcedureCost = async (row) => {
@@ -275,9 +322,14 @@ export default function Financials() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-          <h2 className="text-sm font-bold text-gray-950 dark:text-white">Add Expense</h2>
-          <p className="mt-1 text-xs text-gray-400">Rent, utility bills, salaries, supplies, and miscellaneous costs.</p>
+        <div id="expense-editor" className="scroll-mt-6 rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-gray-950 dark:text-white">{editingExpenseId ? 'Edit Expense' : 'Add Expense'}</h2>
+              <p className="mt-1 text-xs text-gray-400">{editingExpenseId ? 'Update the selected expense. Its existing receipt is retained.' : 'Rent, utility bills, salaries, supplies, and miscellaneous costs.'}</p>
+            </div>
+            {editingExpenseId && <button type="button" onClick={cancelExpenseEdit} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10" aria-label="Cancel expense edit"><X className="h-4 w-4" /></button>}
+          </div>
           <div className="mt-4 space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <select value={expenseForm.categoryId} onChange={e => setExpenseForm({ ...expenseForm, categoryId: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" title="Expense category">
@@ -330,11 +382,14 @@ export default function Financials() {
                 {['Cash', 'Card', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other'].map(method => <option key={method}>{method}</option>)}
               </select>
             </div>
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-3 text-sm font-semibold text-gray-500 hover:border-[var(--primary)] hover:text-[var(--primary)]">
+            {!editingExpenseId && <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-3 text-sm font-semibold text-gray-500 hover:border-[var(--primary)] hover:text-[var(--primary)]">
               <Upload className="h-4 w-4" /> {expenseForm.receipt ? expenseForm.receipt.name : 'Attach receipt'}
               <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => setExpenseForm({ ...expenseForm, receipt: e.target.files?.[0] || null })} />
-            </label>
-            <Button onClick={saveExpense} disabled={saving}><Receipt className="h-4 w-4" /> Save Expense</Button>
+            </label>}
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={saveExpense} disabled={saving}><Receipt className="h-4 w-4" /> {editingExpenseId ? 'Update Expense' : 'Save Expense'}</Button>
+              {editingExpenseId && <Button variant="secondary" onClick={cancelExpenseEdit} disabled={saving}>Cancel</Button>}
+            </div>
           </div>
         </div>
 
@@ -352,7 +407,12 @@ export default function Financials() {
                     <td className="py-3 text-xs text-gray-500">{expense.branchName || 'All'}</td>
                     <td className="py-3 font-bold text-rose-600">{money(expense.amount)}</td>
                     <td className="py-3">{expense.receiptUrl ? <a href={expense.receiptUrl.startsWith('http') ? expense.receiptUrl : `${fileBase}${expense.receiptUrl}`} target="_blank" rel="noreferrer" className="text-xs font-bold text-[var(--primary)]">Open</a> : <span className="text-xs text-gray-300">None</span>}</td>
-                    <td className="py-3 text-right"><button onClick={() => archiveExpense(expense)} className="text-xs font-bold text-gray-400 hover:text-rose-600">Archive</button></td>
+                    <td className="py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button type="button" onClick={() => startEditExpense(expense)} disabled={saving} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-gray-500 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 dark:hover:bg-indigo-500/10"><Pencil className="h-3.5 w-3.5" /> Edit</button>
+                        <button type="button" onClick={() => deleteExpense(expense)} disabled={saving} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-gray-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 dark:hover:bg-rose-500/10"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {expenses.length === 0 && <tr><td colSpan={7}><EmptyState icon={Receipt} title="No expenses in this range" body="Add rent, bills, salaries, or supplies to start net profit reporting." /></td></tr>}

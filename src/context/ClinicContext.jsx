@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { fetchApi, fetchPublicApi } from '../config/api';
-import { syncBrandingMetadata } from '../utils/branding';
+import { getLogoInitials, syncBrandingMetadata } from '../utils/branding';
 import { PORTAL_CLINIC_SLUG } from '../config/portalPath';
 import { HEALTHCARE_TEMPLATE_KEY, resolveIndustryTemplate, termFromTemplate } from '../config/industryTemplates';
 
@@ -29,6 +29,14 @@ function compact(obj) {
   return Object.fromEntries(Object.entries(obj || {}).filter(([, v]) => v !== null && v !== undefined));
 }
 
+function clinicBranding(obj) {
+  const data = compact(obj);
+  if (data.name && (!data.logo || String(data.logo).trim().toUpperCase() === 'PF')) {
+    data.logo = getLogoInitials(data.name, 'CL');
+  }
+  return data;
+}
+
 const ClinicContext = createContext(null);
 
 // Platform brand shown on the shared/superadmin login at crea8ivmedia.com and
@@ -49,7 +57,7 @@ const defaultClinicInfo = {
   paymentTerms: 'Pending balances are shown on every invoice and should be cleared before the next appointment unless approved by admin.',
   mission: 'Help clinics run premium, transparent, patient-friendly operations through one digital platform.',
   vision: 'To be the operating system modern clinics rely on every day.',
-  servicesOverview: 'Appointments, patient records, billing, inventory, staff, marketing and reporting — in one portal.',
+  servicesOverview: 'Appointments, operational patient profiles, billing, inventory, staff, marketing and reporting — in one portal.',
   branches: [],
   activeBranch: '',
   specialties: ['dental'],
@@ -59,6 +67,13 @@ const defaultClinicInfo = {
 
 const defaultFeatures = {
   industryTemplate: HEALTHCARE_TEMPLATE_KEY,
+  operatingMode: 'operations_only',
+  clinicalRecordEnabled: false,
+  treatmentProcedureEntryEnabled: false,
+  medicalHistoryEntryEnabled: false,
+  patientImagePublicationEnabled: false,
+  aiClinicalAdviceEnabled: false,
+  clinicalPolicyVersion: 'operations-v1',
   marketingEnabled: false,
   metaLeadsEnabled: false,
   importsEnabled: false,
@@ -70,6 +85,8 @@ const defaultFeatures = {
   aiHumanApprovalRequired: true,
   monthlyAiTokenLimit: 0,
   monthlyWhatsAppLimit: 0,
+  package: { key: 'core', name: 'Starter', pricePKR: 50000, annualPricePKR: 50000 },
+  subscription: null,
 };
 
 export function ClinicProvider({ children }) {
@@ -124,7 +141,7 @@ export function ClinicProvider({ children }) {
           setClinicMatched(true);
           setClinicInfo((current) => ({
             ...current,
-            ...compact(data.clinic),
+            ...clinicBranding(data.clinic),
             _matchedDomain: window.location.hostname,
           }));
         }
@@ -147,7 +164,7 @@ export function ClinicProvider({ children }) {
         setIndustryTemplate(resolveIndustryTemplate(data?.industryConfig));
         if (data?.clinic) {
           setClinicMatched(true);
-          setClinicInfo((current) => ({ ...current, ...compact(data.clinic), _clinicId: data.clinic.id }));
+          setClinicInfo((current) => ({ ...current, ...clinicBranding(data.clinic), _clinicId: data.clinic.id }));
         }
       })
       .catch(() => {})
@@ -165,7 +182,7 @@ export function ClinicProvider({ children }) {
       .then((data) => {
         if (data?.clinic) {
           setClinicMatched(true);
-          setClinicInfo((current) => ({ ...current, ...compact(data.clinic), _clinicId: data.clinic.id }));
+          setClinicInfo((current) => ({ ...current, ...clinicBranding(data.clinic), _clinicId: data.clinic.id }));
         }
       })
       .catch(() => {});

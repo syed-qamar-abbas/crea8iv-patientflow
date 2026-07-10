@@ -11,7 +11,6 @@ import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import ColorPicker from '../components/ui/ColorPicker';
 import ClinicLogoMark from '../components/branding/ClinicLogoMark';
-import CustomDomain from '../components/settings/CustomDomain';
 import { fetchApi } from '../config/api';
 import { getLogoInitials, isImageLogo } from '../utils/branding';
 import { missingClinicFields, isFilled } from '../config/requiredSettings';
@@ -61,9 +60,9 @@ function AccountManagement() {
   const [formError, setFormError] = useState('');
 
   // Add form
-  const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'receptionist', ledgerMode: 'actual' });
+  const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'receptionist' });
   // Edit form
-  const [editForm, setEditForm] = useState({ name: '', email: '', role: 'receptionist', ledgerMode: 'actual' });
+  const [editForm, setEditForm] = useState({ name: '', email: '', role: 'receptionist' });
   // Reset form
   const [resetForm, setResetForm] = useState({ newPassword: '', confirm: '' });
   const [showResetPass, setShowResetPass] = useState(false);
@@ -84,7 +83,7 @@ function AccountManagement() {
   useEffect(() => { load(); }, [load]);
 
   const openEdit = (u) => {
-    setEditForm({ name: u.name || '', email: u.email || '', role: u.role || 'receptionist', ledgerMode: u.ledgerMode || 'actual' });
+    setEditForm({ name: u.name || '', email: u.email || '', role: u.role || 'receptionist' });
     setFormError('');
     setEditUser(u);
   };
@@ -101,7 +100,7 @@ function AccountManagement() {
     try {
       await fetchApi('/users', { method: 'POST', body: JSON.stringify(addForm) });
       setAddOpen(false);
-      setAddForm({ name: '', email: '', password: '', role: 'receptionist', ledgerMode: 'actual' });
+      setAddForm({ name: '', email: '', password: '', role: 'receptionist' });
       await load();
     } catch (err) {
       setFormError(err.message || 'Failed to create user');
@@ -173,7 +172,7 @@ function AccountManagement() {
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={() => { setAddForm({ name: '', email: '', password: '', role: 'receptionist', ledgerMode: 'actual' }); setFormError(''); setAddOpen(true); }}>
+        <Button size="sm" onClick={() => { setAddForm({ name: '', email: '', password: '', role: 'receptionist' }); setFormError(''); setAddOpen(true); }}>
           <Plus className="w-4 h-4" /> Add User
         </Button>
       </div>
@@ -218,11 +217,6 @@ function AccountManagement() {
                     <td className="py-3 px-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <Badge label={u.role} variant={ROLE_BADGE_VARIANT[u.role] || 'inactive'} />
-                        {u.role === 'owner' && u.ledgerMode === 'regular' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40">
-                            Regular Prices
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="py-3 px-5">
@@ -286,16 +280,6 @@ function AccountManagement() {
               {roleOptions.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
-          {addForm.role === 'owner' && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Ledger Mode</label>
-              <select value={addForm.ledgerMode} onChange={(e) => setAddForm({ ...addForm, ledgerMode: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40">
-                <option value="actual">Actual Prices — sees real fees collected</option>
-                <option value="regular">Regular Prices — sees standard/list prices only</option>
-              </select>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Controls which price ledger this owner sees. "Regular Prices" hides discounted/actual fees.</p>
-            </div>
-          )}
           {formError && (
             <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg px-3 py-2">{formError}</div>
           )}
@@ -323,16 +307,6 @@ function AccountManagement() {
               {roleOptions.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
-          {editForm.role === 'owner' && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Ledger Mode</label>
-              <select value={editForm.ledgerMode} onChange={(e) => setEditForm({ ...editForm, ledgerMode: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40">
-                <option value="actual">Actual Prices — sees real fees collected</option>
-                <option value="regular">Regular Prices — sees standard/list prices only</option>
-              </select>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Controls which price ledger this owner sees.</p>
-            </div>
-          )}
           {formError && (
             <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg px-3 py-2">{formError}</div>
           )}
@@ -1004,9 +978,6 @@ export default function Settings() {
           <p className="text-xs text-amber-700 font-medium">All {patientLabel} data is encrypted at rest. Automatic daily backups enabled.</p>
         </div>
       </div>
-
-      {/* Custom Domain (owner only) */}
-      {getCurrentUser()?.role === 'owner' && <CustomDomain />}
 
       {/* Account Management (owner only) */}
       {getCurrentUser()?.role === 'owner' && <AccountManagement />}

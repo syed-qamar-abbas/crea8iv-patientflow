@@ -25,9 +25,9 @@ coverage/
 # history-cleanup step after production data is backed up.
 backend/prisma/*.db
 backend-php/error_log
+backend-php/vendor/
 backend-php/logs/*
 backend-php/uploads/*
 !backend-php/uploads/.gitkeep
 !backend-php/uploads/.htaccess
 backend-php/backups/
-

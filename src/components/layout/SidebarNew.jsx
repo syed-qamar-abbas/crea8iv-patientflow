@@ -20,7 +20,7 @@ const navGroups = [
       { to: '/reception', icon: ClipboardList, label: 'Reception Desk' },
       { to: '/appointments', icon: Calendar, label: 'Appointments' },
       { to: '/clients', icon: Users, label: 'Patients' },
-      { to: '/clinical', icon: Stethoscope, label: 'Clinical' },
+      { to: '/clinical', icon: Stethoscope, label: 'Operations Workspace' },
       { to: '/staff', icon: UserCheck, label: 'Staff' },
       { to: '/services', icon: Stethoscope, label: 'Services' },
       { to: '/financials', icon: DollarSign, label: 'Financials' },
@@ -101,10 +101,18 @@ const MODULE_KEYS = {
   '/settings': 'settings',
 };
 
+const money = (value) => `PKR ${Number(value || 0).toLocaleString('en-US')}`;
+
 export default function SidebarNew() {
   const { clinicInfo, features, industryTemplate } = useClinic();
   const [collapsed, setCollapsed] = useState(false);
   const role = getCurrentRole();
+  const subscription = features.subscription;
+  const packageInfo = features.package || {};
+  const planName = subscription?.packageName || packageInfo.name || 'Starter';
+  const planCycle = subscription?.billingCycle || 'monthly';
+  const planAmount = subscription?.amountPKR || packageInfo.pricePKR || 0;
+  const expiresAt = subscription?.expiresAt ? String(subscription.expiresAt).slice(0, 10) : '';
 
   return (
     <aside
@@ -148,6 +156,14 @@ export default function SidebarNew() {
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">Brand Suite</p>
             <p className="mt-1 text-xs text-white/70 truncate">{clinicInfo.activeBranch}</p>
             <p className="mt-1 text-[10px] font-semibold text-white/40">{ROLE_LABELS[role]} Portal</p>
+            <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">Subscribed Plan</p>
+              <p className="mt-1 text-xs font-bold text-white truncate">{planName}</p>
+              <p className="mt-0.5 text-[10px] font-semibold capitalize text-white/50">
+                {money(planAmount)} / {planCycle}
+              </p>
+              {expiresAt && <p className="mt-0.5 text-[10px] text-white/35">Active until {expiresAt}</p>}
+            </div>
           </div>
         )}
       </div>

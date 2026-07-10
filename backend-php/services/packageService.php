@@ -48,7 +48,9 @@ function pf_packages() {
 
     return [
         'core' => [
-            'key' => 'core', 'name' => 'Starter', 'pricePKR' => 25000,
+            'key' => 'core', 'name' => 'Starter', 'pricePKR' => 50000,
+            'annualPricePKR' => 50000,
+            'annualNote' => 'Yearly offer requires full advance payment.',
             'tagline' => 'Everything to run the clinic day-to-day.',
             'flags' => $core,
             'modules' => $starterModules,
@@ -56,6 +58,8 @@ function pf_packages() {
         ],
         'ai' => [
             'key' => 'ai', 'name' => 'AppointmentFlow AI', 'pricePKR' => 40000,
+            'annualPricePKR' => 336000,
+            'annualNote' => '30% off when paid yearly in advance.',
             'tagline' => 'Starter plus WhatsApp automation, Meta leads and the AI Receptionist.',
             'flags' => $ai,
             'modules' => array_merge($starterModules, $aiExtraModules),

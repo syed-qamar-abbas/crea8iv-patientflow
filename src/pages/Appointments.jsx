@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Calendar as CalendarIcon, List, Plus, X, ChevronRight, Pencil, Trash2, Save, Loader2, MessageCircle, CalendarClock } from 'lucide-react';
+import { Calendar as CalendarIcon, List, Plus, X, ChevronRight, Pencil, Trash2, Save, Loader2, MessageCircle, CalendarClock, QrCode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
@@ -12,12 +12,12 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import Table from '../components/ui/Table';
 import PatientSearchSelect from '../components/ui/PatientSearchSelect';
+import QRCheckin from '../components/ui/QRCheckin';
 
 const localizer = momentLocalizer(moment);
 
 const money = (value) => `PKR ${Number(value || 0).toLocaleString()}`;
-const getRegularPrice = (appt) => Number(appt.regularPrice ?? appt.price ?? 0);
-const getActualFee = (appt) => Number(appt.actualFee ?? appt.price ?? 0);
+const getTreatmentFee = (appt) => Number(appt.price ?? 0);
 
 const apptClientName = (a) => a.clientName || a.client?.name || '—';
 const apptStaffName = (a) => a.staffName || a.staff?.name || '—';
@@ -32,7 +32,7 @@ const computeEndTime = (start, durationMins) => {
   return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
 };
 
-function AppointmentDetail({ appt, onClose, onEdit, onDelete, onWhatsApp, onReschedule, term }) {
+function AppointmentDetail({ appt, onClose, onEdit, onDelete, onWhatsApp, onReschedule, onQr, term }) {
   if (!appt) return null;
   const name = apptClientName(appt);
   return (
@@ -57,8 +57,7 @@ function AppointmentDetail({ appt, onClose, onEdit, onDelete, onWhatsApp, onResc
             { label: 'Time', value: `${appt.startTime} – ${appt.endTime || ''}` },
             { label: 'Duration', value: appt.duration ? `${appt.duration} min` : '—' },
             { label: 'Room', value: appt.room || '—' },
-            { label: 'Regular Price', value: money(getRegularPrice(appt)) },
-            { label: 'Actual Fee', value: money(getActualFee(appt)) },
+            { label: 'Treatment Fee', value: money(getTreatmentFee(appt)) },
           ].map(({ label, value }) => (
             <div key={label} className="bg-gray-50 dark:bg-white/5 rounded-xl p-3">
               <p className="text-[10px] text-gray-400 uppercase tracking-wider">{label}</p>
@@ -82,6 +81,9 @@ function AppointmentDetail({ appt, onClose, onEdit, onDelete, onWhatsApp, onResc
         )}
       </div>
       <div className="p-6 border-t border-gray-100 dark:border-white/10 space-y-2">
+        <Button variant="secondary" size="sm" className="w-full justify-center" onClick={() => onQr(appt)} disabled={appt.checkedIn || ['cancelled', 'completed', 'no-show'].includes(appt.status)}>
+          <QrCode className="w-4 h-4" /> Secure QR check-in
+        </Button>
         <Button variant="secondary" size="sm" className="w-full justify-center" onClick={() => onReschedule(appt)}>
           <CalendarClock className="w-4 h-4" /> Reschedule
         </Button>
@@ -103,7 +105,7 @@ function AppointmentDetail({ appt, onClose, onEdit, onDelete, onWhatsApp, onResc
 
 const emptyForm = {
   clientId: '', staffId: '', serviceId: '', otherTreatment: '',
-  regularPrice: '', actualFee: '',
+  price: '',
   date: new Date().toISOString().slice(0, 10),
   startTime: '10:00', duration: 30, room: '', notes: '', status: 'pending',
 };
@@ -119,8 +121,7 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
         staffId: target.staffId || target.staff?.id || '',
         serviceId: target.serviceId || target.service?.id || '',
         otherTreatment: target.otherTreatment || '',
-        regularPrice: target.regularPrice ?? target.price ?? '',
-        actualFee: target.actualFee ?? target.price ?? '',
+        price: target.price ?? '',
         date: target.date ? String(target.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
         startTime: target.startTime || '10:00',
         duration: target.duration || 30,
@@ -142,8 +143,7 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
     setForm(curr => ({
       ...curr,
       serviceId,
-      regularPrice: service ? String(service.price) : curr.regularPrice,
-      actualFee: service ? String(service.price) : curr.actualFee,
+      price: service ? String(service.price) : curr.price,
       duration: service?.duration || curr.duration,
     }));
   };
@@ -166,9 +166,7 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
       room: form.room,
       notes: form.notes,
       status: form.status,
-      regularPrice: Number(form.regularPrice) || 0,
-      actualFee: Number(form.actualFee) || 0,
-      price: Number(form.actualFee) || Number(form.regularPrice) || 0,
+      price: Number(form.price) || 0,
     };
     onSave(payload);
   };
@@ -203,19 +201,13 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
             <input value={form.otherTreatment} onChange={e => set('otherTreatment', e.target.value)} placeholder={`Write ${term('treatment', 'treatment').toLowerCase()} name...`} className={inputCls} />
           </div>
         )}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Regular Price</label>
-            <input type="number" value={form.regularPrice} onChange={e => set('regularPrice', e.target.value)} placeholder="" className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Actual Fee *</label>
-            <input type="number" value={form.actualFee} onChange={e => set('actualFee', e.target.value)} placeholder="" className={inputCls} />
-          </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Treatment Fee *</label>
+          <input type="number" min="0" value={form.price} onChange={e => set('price', e.target.value)} className={inputCls} />
         </div>
         {(selectedService || showOther) && (
           <div className="rounded-lg border border-teal-100 dark:border-teal-500/30 bg-teal-50 dark:bg-teal-500/10 px-3 py-2 text-xs text-teal-800 dark:text-teal-200">
-            Audit reports use the actual fee received. Regular-price accounting still uses service price only.
+            This is the final fee recorded for the appointment and used in reports.
           </div>
         )}
         <div>
@@ -361,6 +353,7 @@ export default function Appointments() {
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [rescheduleTarget, setRescheduleTarget] = useState(null);
+  const [qrTarget, setQrTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -428,6 +421,12 @@ export default function Appointments() {
     }
   };
 
+  const handleManualCheckin = async (appointment) => {
+    await fetchApi(`/appointments/${appointment.id}/checkin`, { method: 'PUT' });
+    setQrTarget(null);
+    await loadAppointments();
+  };
+
   const filtered = useMemo(() => {
     const byDate = (a, b) => (a.date || '').localeCompare(b.date || '') || (a.startTime || '').localeCompare(b.startTime || '');
     const name = (a) => (a.clientName || a.client?.name || '').toLowerCase();
@@ -471,8 +470,7 @@ export default function Appointments() {
     { key: 'staff', label: term('staff', 'Staff'), render: (_, r) => apptStaffName(r) },
     { key: 'room', label: 'Room' },
     { key: 'status', label: 'Status', render: (v) => v ? <Badge label={v} variant={v} /> : null },
-    { key: 'regularPrice', label: 'Regular Price', render: (_, r) => <span className="font-medium">{money(getRegularPrice(r))}</span> },
-    { key: 'actualFee', label: 'Actual Fee', render: (_, r) => <span className="font-bold text-teal-700">{money(getActualFee(r))}</span> },
+    { key: 'price', label: 'Treatment Fee', render: (_, r) => <span className="font-bold text-teal-700">{money(getTreatmentFee(r))}</span> },
     {
       key: 'id', label: 'Actions', render: (_, r) => (
         <div className="flex gap-1">
@@ -568,11 +566,19 @@ export default function Appointments() {
             onEdit={(a) => { setEditTarget(a); setShowFormModal(true); }}
             onDelete={(a) => setDeleteTarget(a)}
             onReschedule={(a) => { setRescheduleTarget(a); setSelectedAppt(null); }}
+            onQr={(a) => { setQrTarget(a); setSelectedAppt(null); }}
             onWhatsApp={(a) => navigate(`/whatsapp?client=${a.clientId || a.client?.id}`)}
             term={term}
           />
         </>
       )}
+
+      <QRCheckin
+        appointment={qrTarget}
+        isOpen={!!qrTarget}
+        onClose={() => setQrTarget(null)}
+        onCheckin={handleManualCheckin}
+      />
 
       <RescheduleModal
         appt={rescheduleTarget}

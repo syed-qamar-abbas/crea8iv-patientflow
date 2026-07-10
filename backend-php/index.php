@@ -267,6 +267,7 @@ $routes = [
     ['POST', '^api/v1/admin/tenants/([^/]+)/extend$', 'AdminController', 'extendTenant', 'admin'],
     ['POST', '^api/v1/admin/tenants/([^/]+)/subscription$', 'AdminController', 'setSubscription', 'admin'],
     ['POST', '^api/v1/admin/tenants/([^/]+)/impersonate$', 'AdminController', 'impersonateTenant', 'admin'],
+    ['POST', '^api/v1/admin/tenants/([^/]+)/owner-password$', 'AdminController', 'resetTenantOwnerPassword', 'admin'],
     ['PUT', '^api/v1/admin/tenants/([^/]+)/package$', 'AdminController', 'setPackage', 'admin'],
     ['PUT', '^api/v1/admin/tenants/([^/]+)/domain$', 'AdminController', 'setDomain', 'admin'],
     ['PUT', '^api/v1/admin/tenants/([^/]+)/domain/ssl$', 'AdminController', 'setDomainSsl', 'admin'],
@@ -347,6 +348,9 @@ $routes = [
     ['DELETE', '^api/v1/appointments/([^/]+)$', 'AppointmentController', 'remove', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
     ['PUT', '^api/v1/appointments/([^/]+)/cancel$', 'AppointmentController', 'cancel', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
     ['PUT', '^api/v1/appointments/([^/]+)/reschedule$', 'AppointmentController', 'reschedule', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
+    ['POST', '^api/v1/appointments/([^/]+)/checkin-token$', 'AppointmentController', 'issueCheckinToken', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
+    ['POST', '^api/v1/appointments/([^/]+)/checkin-token/revoke$', 'AppointmentController', 'revokeCheckinToken', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
+    ['POST', '^api/v1/appointments/checkin/scan$', 'AppointmentController', 'scanCheckinToken', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
     ['PUT', '^api/v1/appointments/([^/]+)/checkin$', 'AppointmentController', 'checkIn', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
 
     // Staff Routes

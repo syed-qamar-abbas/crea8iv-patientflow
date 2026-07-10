@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Calendar, CheckCircle2, ClipboardEdit, Loader2, Stethoscope, UserRound } from 'lucide-react';
+import { Activity, Calendar, CheckCircle2, Loader2, Stethoscope, UserRound } from 'lucide-react';
 import { fetchApi } from '../config/api';
 import { useClinic } from '../context/ClinicContext';
 import Badge from '../components/ui/Badge';
-import Button from '../components/ui/Button';
 
 const money = (value) => `PKR ${Number(value || 0).toLocaleString()}`;
 
@@ -31,8 +30,6 @@ export default function ClinicalWorkspace() {
   const treatmentLabel = term('treatment', 'Treatment');
   const serviceLabel = term('service', 'Service');
   const servicesLabel = term('services', 'Services');
-  const clinicalWorkspaceLabel = term('clinicalWorkspace', 'Clinical Workspace');
-  const clinicalNotesLabel = term('clinicalNotes', 'Clinical Notes');
   const [appointments, setAppointments] = useState([]);
   const [clients, setClients] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -70,15 +67,14 @@ export default function ClinicalWorkspace() {
 
   return (
     <div className="space-y-5">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+        <strong>Operations workspace:</strong> workload and appointment history only. PatientFlow is not currently an EHR and must not be used as the authoritative clinical record.
+      </div>
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-950 dark:text-white">{clinicalWorkspaceLabel}</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Live workload, {treatmentLabel.toLowerCase()} {appointmentsLabel.toLowerCase()}, {staffLabel.toLowerCase()} capacity and {serviceLabel.toLowerCase()} coverage.</p>
+          <h1 className="text-xl font-bold text-gray-950 dark:text-white">Operations Workspace</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Operational workload, {appointmentsLabel.toLowerCase()}, {staffLabel.toLowerCase()} capacity and {serviceLabel.toLowerCase()} coverage.</p>
           {error && <p className="mt-2 text-xs font-semibold text-rose-600">{error}</p>}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm"><ClipboardEdit className="h-4 w-4" /> Add {clinicalNotesLabel}</Button>
-          <Button size="sm"><CheckCircle2 className="h-4 w-4" /> Mark {treatmentLabel} Complete</Button>
         </div>
       </div>
 

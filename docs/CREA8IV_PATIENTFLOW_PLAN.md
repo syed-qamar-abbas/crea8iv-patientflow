@@ -235,7 +235,7 @@ PLATFORM LEVEL (clinicId = NULL)
 TENANT LEVEL (clinicId = X)     — existing roles, unchanged
 └── owner                       — everything in their clinic
     ├── manager                 — operations, reports, no billing settings
-    ├── doctor / clinical       — patients, appointments, clinical notes
+    ├── doctor / operations     — patients, appointments, operational workflow
     ├── reception               — desk, appointments, invoicing
     └── staff                   — limited self view
 
@@ -249,7 +249,7 @@ PATIENT LEVEL
 | Platform revenue dashboard | ✅ | — | — | — | — | — |
 | Clinic settings, branding, users | — | ✅ | — | — | — | — |
 | Financial reports | — | ✅ | ✅ | — | — | — |
-| Patients & clinical records | — | ✅ | ✅ | ✅ | ✅ (no clinical notes) | — |
+| Patient operations profiles | — | ✅ | ✅ | ✅ | ✅ | — |
 | Appointments | — | ✅ | ✅ | ✅ | ✅ | view own |
 | Invoicing | — | ✅ | ✅ | — | ✅ | — |
 | WhatsApp inbox | — | ✅ | ✅ | — | ✅ | — |

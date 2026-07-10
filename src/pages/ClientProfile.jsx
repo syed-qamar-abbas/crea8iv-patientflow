@@ -94,7 +94,7 @@ const TP_STATUS = {
   cancelled: { label: 'Cancelled', cls: 'bg-rose-100 text-rose-700' },
 };
 
-function TreatmentPlan({ clientId }) {
+function TreatmentPlan({ clientId, readOnly }) {
   const { term } = useClinic();
   const treatmentLabel = term('treatment', 'Treatment');
   const [items, setItems] = useState(null);
@@ -125,6 +125,7 @@ function TreatmentPlan({ clientId }) {
         <h3 className="text-sm font-black text-gray-950 dark:text-white">{treatmentLabel} Plan</h3>
         {total > 0 && <span className="text-xs font-bold text-gray-500">Plan total: {money(total)}</span>}
       </div>
+      {readOnly && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Existing entries are preserved for reference only. This is not a complete or authoritative clinical record.</p>}
       {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
 
       {!items ? (
@@ -137,22 +138,26 @@ function TreatmentPlan({ clientId }) {
                 <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{it.procedure}{it.tooth ? <span className="text-gray-400 font-normal"> · tooth {it.tooth}</span> : null}</p>
               </div>
               <span className="text-sm font-bold text-gray-900 dark:text-white">{money(it.cost)}</span>
-              <select value={it.status} onChange={(e) => setStatus(it, e.target.value)} className={`${fld} text-xs`}>
-                {Object.entries(TP_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-              </select>
-              <button onClick={() => del(it)} className="rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
+              {readOnly ? <span className={`rounded-full px-2 py-1 text-xs font-bold ${TP_STATUS[it.status]?.cls || TP_STATUS.planned.cls}`}>{TP_STATUS[it.status]?.label || it.status}</span> : (
+                <>
+                  <select value={it.status} onChange={(e) => setStatus(it, e.target.value)} className={`${fld} text-xs`}>
+                    {Object.entries(TP_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
+                  <button onClick={() => del(it)} className="rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                </>
+              )}
             </div>
           ))}
           {items.length === 0 && <p className="py-4 text-center text-sm text-gray-400">No {treatmentLabel.toLowerCase()}s planned yet.</p>}
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-white/10">
+      {!readOnly && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-white/10">
         <input className={`${fld} flex-1 min-w-[140px]`} placeholder={`${treatmentLabel} details`} value={form.procedure} onChange={(e) => setForm({ ...form, procedure: e.target.value })} />
         <input className={`${fld} w-24`} placeholder="Tooth" value={form.tooth} onChange={(e) => setForm({ ...form, tooth: e.target.value })} />
         <input className={`${fld} w-28`} type="number" placeholder="Cost" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
         <Button size="sm" onClick={add} disabled={busy || !form.procedure.trim()}>Add</Button>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -190,7 +195,7 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function DentalProcedureDetails({ clientId, appointments }) {
+function DentalProcedureDetails({ clientId, appointments, readOnly }) {
   const { term } = useClinic();
   const treatmentLabel = term('treatment', 'Treatment');
   const doctorLabel = term('doctor', 'Doctor');
@@ -250,17 +255,18 @@ function DentalProcedureDetails({ clientId, appointments }) {
           <h3 className="text-sm font-black text-gray-950 dark:text-white">Dental Procedure Details</h3>
           <p className="mt-1 text-xs text-gray-400">Structured tooth, jaw, material, canal, extraction, and follow-up details.</p>
         </div>
-        <div className="flex flex-wrap gap-1">
+        {!readOnly && <div className="flex flex-wrap gap-1">
           {Object.keys(procedurePresets).map(name => (
             <button key={name} onClick={() => setForm({ ...emptyProcedure, procedureType: name, performedAt: form.performedAt || todayDate() })} className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold ${form.procedureType === name ? 'border-transparent bg-[var(--primary)] text-white' : 'border-gray-200 text-gray-500'}`}>
               {name}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
+      {readOnly && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Procedure entry is disabled. Historical rows remain visible and must be verified against the clinic's approved clinical record.</p>}
       {err && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{err}</p>}
 
-      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+      {!readOnly && <><div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
         <input list="pf-service-list" value={form.procedureType} onChange={e => chooseTreatmentType(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder={`${treatmentLabel} type — pick a service or type custom`} />
         <datalist id="pf-service-list">
           {services.map(s => <option key={s.id} value={s.name} label={`PKR ${Number(s.price || 0).toLocaleString()}`} />)}
@@ -296,6 +302,7 @@ function DentalProcedureDetails({ clientId, appointments }) {
       <div className="mt-3 flex justify-end">
         <Button onClick={submit} disabled={busy}><Save className="h-4 w-4" /> Save Procedure</Button>
       </div>
+      </>}
 
       <div className="mt-4 space-y-2 border-t border-gray-100 pt-4 dark:border-white/10">
         {!items ? (
@@ -312,7 +319,7 @@ function DentalProcedureDetails({ clientId, appointments }) {
               </p>
               <p className="text-xs text-gray-500">{String(item.performedAt || '').slice(0, 10)} - {item.staffName || doctorLabel}{item.followUpDate ? ` - follow-up ${item.followUpDate}` : ''}</p>
             </div>
-            <button onClick={() => remove(item)} className="self-start rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600 sm:self-center"><Trash2 className="h-3.5 w-3.5" /></button>
+            {!readOnly && <button onClick={() => remove(item)} className="self-start rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600 sm:self-center"><Trash2 className="h-3.5 w-3.5" /></button>}
           </div>
         ))}
       </div>
@@ -364,13 +371,13 @@ function TreatmentTimeline({ clientId }) {
 }
 
 export default function ClientProfile() {
-  const { term } = useClinic();
+  const { term, features } = useClinic();
   const patientLabel = term('patient', 'Patient');
   const patientsLabel = term('patients', 'Patients');
   const appointmentLabel = term('appointment', 'Appointment');
   const appointmentsLabel = term('appointments', 'Appointments');
   const staffLabel = term('staff', 'Staff');
-  const clinicalNotesLabel = term('clinicalNotes', 'Clinical Notes');
+  const clinicalReadOnly = !features.treatmentProcedureEntryEnabled;
   const visitLabel = term('visit', 'Visit');
   const { id } = useParams();
   const navigate = useNavigate();
@@ -481,13 +488,14 @@ export default function ClientProfile() {
           </div>
 
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
-            <h3 className="text-sm font-black text-gray-950 dark:text-white">{clinicalNotesLabel}</h3>
-            <p className="mt-2 text-sm text-gray-500">{client.notes || `No ${clinicalNotesLabel.toLowerCase()} recorded yet.`}</p>
+            <h3 className="text-sm font-black text-gray-950 dark:text-white">Operational Notes</h3>
+            <p className="mt-2 text-sm text-gray-500">{client.notes || 'No operational notes recorded yet.'}</p>
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Not an authoritative clinical note or medical record.</p>
           </div>
 
-          <TreatmentPlan clientId={client.id} />
+          <TreatmentPlan clientId={client.id} readOnly={clinicalReadOnly} />
 
-          <DentalProcedureDetails clientId={client.id} appointments={appointments} />
+          <DentalProcedureDetails clientId={client.id} appointments={appointments} readOnly={clinicalReadOnly} />
 
           <TreatmentTimeline clientId={client.id} />
 

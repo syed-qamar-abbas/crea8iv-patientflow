@@ -59,6 +59,11 @@
 .pf-plan__tag { color: var(--muted); font-size: 14px; margin: 6px 0 18px; line-height: 1.5; }
 .pf-plan__price { font-size: 34px; font-weight: 800; letter-spacing: -.02em; }
 .pf-plan__price span { font-size: 15px; font-weight: 500; color: var(--faint); }
+.pf-plan__annual { margin-top: 14px; padding: 14px; border-radius: var(--radius-sm); background: var(--grad-soft); border: 1px solid var(--glass-line); }
+.pf-plan__annual span { display: block; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); }
+.pf-plan__annual strong { display: block; margin-top: 4px; font-size: 20px; line-height: 1.2; }
+.pf-plan__annual em { margin-left: 3px; font-size: 12px; font-style: normal; color: var(--faint); font-weight: 600; }
+.pf-plan__annual p { margin-top: 5px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
 .pf-plan__list { list-style: none; margin: 22px 0; display: grid; gap: 11px; }
 .pf-plan__list li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
 .pf-plan__list .pf-ico { width: 17px; height: 17px; color: var(--accent); flex: 0 0 auto; }
@@ -188,3 +193,5 @@
 
 /* generic light section flip */
 .pf-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: clamp(24px, 4vw, 46px); }
+.pf-demo-preview { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 28px; align-items: center; }
+@media (max-width: 780px) { .pf-demo-preview { grid-template-columns: 1fr; } }

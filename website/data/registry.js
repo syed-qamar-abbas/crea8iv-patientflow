@@ -13,9 +13,14 @@ window.PF = (function () {
       id: 'starter',
       name: 'Starter',
       tagline: 'Everything to run the clinic, end to end.',
-      pricePKR: 25000,
+      pricePKR: 50000,
       period: 'month',
-      blurb: 'The complete operating system for a modern clinic — appointments, patient records, billing, clinical charting, inventory, staff and your own booking site.',
+      annualOffer: {
+        label: 'Yearly offer',
+        annualPricePKR: 50000,
+        note: 'Pay the full yearly amount in advance to activate this offer.',
+      },
+      blurb: 'The operations platform for a modern clinic — appointments, operational patient profiles, billing, inventory, staff and your own booking site. Not an EHR.',
       bestFor: 'Single-location clinics that want to replace registers, spreadsheets and WhatsApp chaos with one clean system.',
       accent: '#FE6A09',
       highlight: false,
@@ -27,6 +32,11 @@ window.PF = (function () {
       tagline: 'Starter + automation that fills your calendar for you.',
       pricePKR: 40000,
       period: 'month',
+      annualOffer: {
+        label: '30% off yearly',
+        annualPricePKR: 336000,
+        note: 'Billed once in advance for 12 months.',
+      },
       blurb: 'Everything in Starter, plus WhatsApp automation, an AI receptionist, review generation and reactivation campaigns that turn your existing patient list into predictable monthly revenue.',
       bestFor: 'Growth-minded clinics that want appointments booked automatically — recalls, reminders, reviews and reactivation running 24/7.',
       accent: '#FF8A2A',
@@ -38,7 +48,7 @@ window.PF = (function () {
   // ---- Feature categories (order = display order) ------------------------
   const CATEGORIES = [
     { id: 'operations', name: 'Clinic Operations', icon: 'calendar' },
-    { id: 'patients', name: 'Patients & Clinical', icon: 'users' },
+    { id: 'patients', name: 'Patient Operations', icon: 'users' },
     { id: 'billing', name: 'Billing & Finance', icon: 'receipt' },
     { id: 'growth', name: 'Growth & Marketing', icon: 'trending' },
     { id: 'ai', name: 'AI & Automation', icon: 'sparkles' },
@@ -56,9 +66,9 @@ window.PF = (function () {
     { id: 'staff', name: 'Staff & Roles', category: 'operations', icon: 'idcard', plans: ['starter', 'ai'], desc: 'Role-based access for owners, managers, doctors, reception and accountants — everyone sees exactly what they should.', outcome: 'Security + accountability.' },
 
     // Patients & clinical
-    { id: 'records', name: 'Patient Records', category: 'patients', icon: 'folder', plans: ['starter', 'ai'], desc: 'Complete profiles, history, documents and searchable typeahead by name, phone, email or patient number.', outcome: 'Find any patient in seconds.' },
-    { id: 'clinical', name: 'Clinical Charting', category: 'patients', icon: 'tooth', plans: ['starter', 'ai'], desc: 'Dental charting with an FDI tooth picker, treatment plans and per-procedure clinical notes.', outcome: 'Structured, defensible records.' },
-    { id: 'documents', name: 'Documents & Gallery', category: 'patients', icon: 'image', plans: ['starter', 'ai'], desc: 'Before/after images and patient documents (consent forms, lab reports, prescriptions) — served over secure signed links.', outcome: 'Everything in one secure place.' },
+    { id: 'records', name: 'Patient Profiles', category: 'patients', icon: 'folder', plans: ['starter', 'ai'], desc: 'Operational contact profiles, private documents and searchable typeahead by name, phone, email or patient number.', outcome: 'Find any patient in seconds.' },
+    { id: 'clinical', name: 'Historical Treatment View', category: 'patients', icon: 'tooth', plans: ['starter', 'ai'], desc: 'Existing treatment and procedure data remains available as read-only reference data; PatientFlow is not an EHR.', outcome: 'Preserve continuity without unsafe charting claims.' },
+    { id: 'documents', name: 'Private Documents & Media', category: 'patients', icon: 'image', plans: ['starter', 'ai'], desc: 'Authorized staff can store private patient documents and media over secure signed links; public patient-image publishing is disabled.', outcome: 'Keep operational files private.' },
     { id: 'feedback', name: 'Patient Feedback', category: 'patients', icon: 'star', plans: ['starter', 'ai'], desc: 'Capture visit feedback and satisfaction so you act on issues before they become bad reviews.', outcome: 'Protect your reputation.' },
 
     // Billing & finance
@@ -180,16 +190,16 @@ window.PF = (function () {
     { q: 'Is my patient data secure?', a: 'Yes. Data is encrypted, files are served only through signed links, every clinic is fully isolated from every other, sensitive actions are audit-logged, and the database is backed up nightly with offsite copies.' },
     { q: 'Do I need to install anything?', a: 'No. PatientFlow runs in any browser on desktop, tablet and mobile. Your clinic gets its own branded URL instantly — no setup, no servers.' },
     { q: 'Can I use my own clinic domain?', a: 'Yes. You can run on your own domain (e.g. portal.yourclinic.com) with valid SSL, or use the free branded URL we provide.' },
-    { q: 'What\'s the difference between the two plans?', a: 'Starter runs your whole clinic — appointments, records, billing, clinical, staff and your booking site. AppointmentFlow AI adds WhatsApp automation, an AI receptionist, review generation and reactivation campaigns that fill your calendar automatically.' },
+    { q: 'What\'s the difference between the two plans?', a: 'Starter runs clinic operations — appointments, patient profiles, billing, staff and your booking site. AppointmentFlow AI adds WhatsApp automation, an administrative AI receptionist, review generation and reactivation campaigns.' },
     { q: 'Can I switch or upgrade later?', a: 'Absolutely. You can upgrade from Starter to AppointmentFlow AI at any time and every feature turns on instantly — your data stays exactly where it is.' },
-    { q: 'Is there a contract?', a: 'Plans are monthly. Your data is always yours and always exportable.' },
+    { q: 'Is there a contract?', a: 'Monthly plans renew month to month. Yearly offers require the full advance payment for the year. Your data is always yours and always exportable.' },
   ];
 
   // ---- Use cases ---------------------------------------------------------
   const USE_CASES = [
-    { id: 'dental', name: 'Dental Clinics', icon: 'tooth', desc: 'Charting, recalls for cleanings, treatment packages and before/after galleries.' },
+    { id: 'dental', name: 'Dental Clinics', icon: 'tooth', desc: 'Scheduling, recalls, treatment-package billing and private patient media.' },
     { id: 'aesthetic', name: 'Aesthetic & Skin', icon: 'sparkles', desc: 'Package sessions, consent documents, reactivation and review generation.' },
-    { id: 'medical', name: 'Medical & GP', icon: 'stethoscope', desc: 'Patient records, appointments, billing and automated reminders.' },
+    { id: 'medical', name: 'Medical & GP', icon: 'stethoscope', desc: 'Operational patient profiles, appointments, billing and automated reminders.' },
     { id: 'physio', name: 'Physiotherapy', icon: 'activity', desc: 'Session packages, recall campaigns and progress tracking.' },
     { id: 'multi', name: 'Multi-Branch Groups', icon: 'building', desc: 'One login across locations with per-branch staff, calendars and reporting.' },
   ];
@@ -200,7 +210,7 @@ window.PF = (function () {
     { id: 'dashboard', name: 'Dashboard', blurb: 'Your whole clinic at a glance — today\'s appointments, revenue, dues and staff, live.', features: ['reports', 'appointments', 'financials', 'dues'] },
     { id: 'appointments', name: 'Appointments', blurb: 'A clean scheduling calendar with reminders, reschedule and conflict detection.', features: ['appointments', 'reception', 'ai-reminders'] },
     { id: 'billing', name: 'Billing', blurb: 'Professional invoices with your bank details, flexible discounts and instant PDF.', features: ['billing', 'dues', 'packages'] },
-    { id: 'patients', name: 'Patients', blurb: 'Complete records, clinical charting and secure documents — searchable in seconds.', features: ['records', 'clinical', 'documents'] },
+    { id: 'patients', name: 'Patients', blurb: 'Operational profiles, read-only historical treatment data and private documents — searchable in seconds.', features: ['records', 'clinical', 'documents'] },
     { id: 'automation', name: 'AI & WhatsApp', blurb: 'Reminders, reactivation, reviews and an AI receptionist — working 24/7.', features: ['whatsapp', 'ai-receptionist', 'reviews', 'reactivation'] },
   ];
 
@@ -224,7 +234,7 @@ window.PF = (function () {
     { icon: 'stars', title: 'Review Generation', tag: 'Live', desc: 'Happy patients are automatically asked for a Google review after their visit.' },
     { icon: 'clock', title: 'Recall Campaigns', tag: 'Live', desc: 'Automatic recalls for cleanings and follow-ups based on each patient\'s last visit.' },
     { icon: 'chat', title: 'AI Reply Suggestions', tag: 'Live', desc: 'Smart, on-brand reply drafts for your WhatsApp inbox — a personal touch with zero effort.' },
-    { icon: 'sparkles', title: 'AI Treatment Notes', tag: 'Soon', desc: 'Turn shorthand into structured clinical notes automatically.' },
+    { icon: 'sparkles', title: 'Governed Clinical AI', tag: 'Future / gated', desc: 'Not available unless a compliant clinical model, clinician verification, provenance, and audit controls are implemented.' },
     { icon: 'chart', title: 'Predictive Insights', tag: 'Soon', desc: 'Forecast no-shows, revenue and which patients are about to lapse — before they do.' },
   ];
 

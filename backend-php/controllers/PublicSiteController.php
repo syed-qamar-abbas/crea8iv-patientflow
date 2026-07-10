@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../services/clinicalSafetyPolicyService.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
 
@@ -281,13 +282,16 @@ class PublicSiteController {
         $stmt->execute([$clinic['id']]);
         $testimonials = $stmt->fetchAll();
 
-        $stmt = $db->prepare("SELECT g.id, g.type, g.imageUrl, g.service, g.notes FROM GalleryItem g JOIN Client c ON g.clientId = c.id WHERE c.clinicId = ? AND g.isPrivate = 0 ORDER BY g.createdAt DESC LIMIT 12");
-        $stmt->execute([$clinic['id']]);
-        $gallery = $stmt->fetchAll();
-        // Uploads are no longer web-served directly; public-site images use
-        // signed links too (24h TTL — the page refetches this payload per visit).
-        foreach ($gallery as &$g) { $g['imageUrl'] = pf_uploads_url_to_signed($g['imageUrl'], 86400); }
-        unset($g);
+        $gallery = [];
+        if (pf_clinical_capability_enabled($db, $clinic['id'], 'patientImagePublicationEnabled')) {
+            $stmt = $db->prepare("SELECT g.id, g.type, g.imageUrl, g.service, g.notes FROM GalleryItem g JOIN Client c ON g.clientId = c.id WHERE c.clinicId = ? AND g.isPrivate = 0 ORDER BY g.createdAt DESC LIMIT 12");
+            $stmt->execute([$clinic['id']]);
+            $gallery = $stmt->fetchAll();
+            // Public publication is available only after the safety policy is
+            // explicitly replaced; signed links remain mandatory then.
+            foreach ($gallery as &$g) { $g['imageUrl'] = pf_uploads_url_to_signed($g['imageUrl'], 86400); }
+            unset($g);
+        }
 
         send_json([
             'clinic' => $this->cleanClinic($clinic),

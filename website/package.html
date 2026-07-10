@@ -47,6 +47,7 @@
         <h1 class="pf-h2" id="pkg-name" style="margin-top:16px">—</h1>
         <p class="pf-sub" id="pkg-blurb"></p>
         <div class="pkg-hero__price"><span id="pkg-price">—</span></div>
+        <div id="pkg-annual"></div>
         <div class="pkg-hero__who" id="pkg-who"></div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:26px">
           <a class="btn btn-primary" href="register.html" id="pkg-cta">Get Started</a>
@@ -163,6 +164,7 @@
       <div class="pf-panel reveal" style="text-align:center">
         <h2 class="pf-h2" id="pkg-sum-name">Ready to grow?</h2>
         <div class="pkg-hero__price" style="justify-content:center"><span id="pkg-sum-price">—</span></div>
+        <div id="pkg-sum-annual"></div>
         <p class="pf-sub" style="margin:14px auto 26px">No installation. Your own branded portal, live in minutes.</p>
         <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
           <a class="btn btn-primary" href="register.html">Get Started</a>
@@ -210,9 +212,13 @@
   document.getElementById('pkg-name').textContent = p.name;
   document.getElementById('pkg-blurb').textContent = p.blurb;
   document.getElementById('pkg-price').innerHTML = PF.fmtPrice(p.pricePKR) + '<span>/' + p.period + '</span>';
+  var annualHtml = p.annualOffer ? '<div class="pf-plan__annual" style="max-width:420px;margin-top:16px"><span>' + p.annualOffer.label + '</span><strong>' + PF.fmtPrice(p.annualOffer.annualPricePKR) + '<em>/year</em></strong><p>' + p.annualOffer.note + '</p></div>' : '';
+  var annualSummaryHtml = p.annualOffer ? '<div class="pf-plan__annual" style="max-width:420px;margin:16px auto 0"><span>' + p.annualOffer.label + '</span><strong>' + PF.fmtPrice(p.annualOffer.annualPricePKR) + '<em>/year</em></strong><p>' + p.annualOffer.note + '</p></div>' : '';
+  document.getElementById('pkg-annual').innerHTML = annualHtml;
   document.getElementById('pkg-who').innerHTML = '<strong>Best for:</strong> ' + p.bestFor;
   document.getElementById('pkg-sum-name').textContent = 'Get ' + p.name;
   document.getElementById('pkg-sum-price').innerHTML = PF.fmtPrice(p.pricePKR) + '<span>/' + p.period + '</span>';
+  document.getElementById('pkg-sum-annual').innerHTML = annualSummaryHtml;
   document.getElementById('pkg-sticky-txt').innerHTML = p.name + ' <span>— ' + p.tagline + '</span>';
 
   // Tell the category renderer which plan to scope to.
@@ -224,7 +230,7 @@
     after: ['Automated 24h + 2h reminders cut no-shows', 'Reactivation wins back lapsed patients', 'Google reviews requested automatically', 'AI receptionist answers patients 24/7', 'Targeted WhatsApp campaigns to your list'],
   } : {
     before: ['Appointments tracked in a register', 'Patient files in cabinets and WhatsApp', 'Invoices handwritten or in Excel', 'No visibility into revenue or dues', 'Patients call to book, or don\'t'],
-    after: ['One clean scheduling calendar', 'Complete digital patient records + charting', 'Professional invoices with your bank details', 'Live dashboards for revenue, dues and staff', 'Your own 24/7 booking website'],
+    after: ['One clean scheduling calendar', 'Operational patient profiles + private documents', 'Professional invoices with your bank details', 'Live dashboards for revenue, dues and staff', 'Your own 24/7 booking website'],
   };
   document.getElementById('pkg-ba').innerHTML =
     '<div class="pf-ba__col pf-ba__col--before"><span class="pf-ba__tag">Before PatientFlow</span><ul>' + ba.before.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></div>' +

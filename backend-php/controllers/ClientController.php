@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../services/dentalFinancialService.php';
+require_once __DIR__ . '/../services/clinicalSafetyPolicyService.php';
 
 class ClientController {
     private function assertClientInClinic($db, $id, $clinicId) {
@@ -101,6 +102,10 @@ class ClientController {
     public function create($input, $user) {
         $db = DB::getConnection();
 
+        if (array_key_exists('medicalHistory', $input) && pf_input_has_meaningful_value($input['medicalHistory'])) {
+            pf_enforce_clinical_capability($db, $user['clinicId'], 'medicalHistoryEntryEnabled', 'Medical-history entry is unavailable while PatientFlow is operating as an operations platform.');
+        }
+
         $id = generate_uuid();
         $patientNo = $input['patientNo'] ?? '';
         
@@ -149,6 +154,10 @@ class ClientController {
     public function update($input, $user, $id) {
         $db = DB::getConnection();
         $this->assertClientInClinic($db, $id, $user['clinicId']);
+
+        if (array_key_exists('medicalHistory', $input)) {
+            pf_enforce_clinical_capability($db, $user['clinicId'], 'medicalHistoryEntryEnabled', 'Medical-history entry is unavailable while PatientFlow is operating as an operations platform.');
+        }
 
         $fields = [];
         $params = [];

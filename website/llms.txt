@@ -5,7 +5,7 @@
 ## What it does
 - Reactivates inactive patients via automated WhatsApp campaigns
 - Sends appointment confirmations, 24-hour and 2-hour reminders, birthday and seasonal campaigns, treatment recalls, review requests, referral and membership renewals
-- Manages appointments, patient records, billing/invoices, inventory, staff roles and reporting
+- Manages appointments, operational patient profiles, billing/invoices, inventory, staff roles and reporting; it is not an EHR
 - Provides a branded public booking website and patient portal
 - Tracks campaign ROI: messages sent, responses, appointments booked and revenue generated
 
@@ -13,11 +13,11 @@
 Clinics that depend on repeat visits: dental, orthodontic, skin, aesthetic, hair transplant, medical, IVF and cosmetic practices. Single location or multi-branch.
 
 ## Pricing
-- Starter — PKR 25,000/month: appointments, patient records, billing, staff roles, booking website, daily backups. Unlimited staff and patients.
-- AppointmentFlow AI — PKR 40,000/month: everything in Starter plus WhatsApp shared inbox, automated reminders, recall/reactivation campaigns, broadcasts, AI receptionist, AI treatment notes and advanced analytics.
+- Starter — PKR 50,000/month, with a PKR 50,000 yearly upfront offer: appointments, operational patient profiles, billing, staff roles, booking website, daily backups. Unlimited staff and patients.
+- AppointmentFlow AI — PKR 40,000/month, or PKR 336,000/year when paid in advance (30% off): everything in Starter plus WhatsApp shared inbox, automated reminders, recall/reactivation campaigns, broadcasts, an administrative AI receptionist and advanced analytics. Clinical AI advice and treatment-note generation are disabled.
 
 ## Proof
-Example campaign: a 3,500-patient database received an automated WhatsApp summer whitening promotion → 150 responses → 45 booked appointments → PKR 675,000 revenue → 27× ROI on a PKR 25,000 subscription.
+Example campaign: a 3,500-patient database received an automated WhatsApp summer whitening promotion → 150 responses → 45 booked appointments → PKR 675,000 revenue.
 
 ## Key pages
 - Home: https://crea8ivmedia.com/patientflow/

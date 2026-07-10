@@ -28,6 +28,10 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
+
+      - name: Install backend dependencies
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --working-dir=backend-php
+
       - name: Backend test suite (gates the deploy)
         run: php backend-php/tests/run-tests.php
 
@@ -36,6 +40,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Install backend dependencies
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --working-dir=backend-php
 
       - uses: actions/setup-node@v4
         with:

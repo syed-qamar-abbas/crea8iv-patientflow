@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
+require_once __DIR__ . '/../services/clinicalSafetyPolicyService.php';
 
 class GalleryController {
     // Confirm the client belongs to the caller's clinic; 404 otherwise.
@@ -68,6 +69,9 @@ class GalleryController {
         $notes = $input['notes'] ?? null;
         $appointmentId = $input['appointmentId'] ?? null;
         $isPrivate = isset($input['isPrivate']) && $input['isPrivate'] === 'false' ? 0 : 1;
+        if (!$isPrivate) {
+            pf_enforce_clinical_capability($db, $user['clinicId'], 'patientImagePublicationEnabled', 'Publishing patient images is disabled until a governed consent and publication model is available.');
+        }
         if ($appointmentId) {
             $stmt = $db->prepare("SELECT id FROM Appointment WHERE id = ? AND clientId = ? AND clinicId = ?");
             $stmt->execute([$appointmentId, $clientId, $user['clinicId']]);

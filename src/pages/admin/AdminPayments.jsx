@@ -19,7 +19,7 @@ export default function AdminPayments() {
   const [busy, setBusy] = useState('');
   const [filter, setFilter] = useState('');
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ clinicId: '', amountPKR: 30000, method: 'bank_transfer', reference: '' });
+  const [form, setForm] = useState({ clinicId: '', amountPKR: 50000, method: 'bank_transfer', reference: '' });
 
   const load = (f = filter) =>
     fetchApi(`/admin/payments${f ? `?status=${f}` : ''}`).then(setPayments).catch((e) => setError(e.message));
@@ -49,7 +49,7 @@ export default function AdminPayments() {
     try {
       await fetchApi('/admin/payments', { method: 'POST', body: JSON.stringify(form) });
       setShowAdd(false);
-      setForm({ clinicId: '', amountPKR: 30000, method: 'bank_transfer', reference: '' });
+      setForm({ clinicId: '', amountPKR: 50000, method: 'bank_transfer', reference: '' });
       await load();
     } catch (e2) {
       setError(e2.message);

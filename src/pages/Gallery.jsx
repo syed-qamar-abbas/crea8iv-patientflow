@@ -5,7 +5,7 @@ import { useClinic } from '../context/ClinicContext';
 import Button from '../components/ui/Button';
 
 export default function Gallery() {
-  const { term } = useClinic();
+  const { term, features } = useClinic();
   const patientLabel = term('patient', 'Patient');
   const galleryLabel = term('gallery', 'Gallery');
   const [clients, setClients] = useState([]);
@@ -35,7 +35,7 @@ export default function Gallery() {
       const form = new FormData();
       form.append('image', file);
       form.append('type', 'case');
-      form.append('isPrivate', 'false');
+      form.append('isPrivate', 'true');
       const token = localStorage.getItem('clinic_token');
       const response = await fetch(`${API_URL}/gallery/${clientId}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
       if (!response.ok) throw new Error('Upload failed');
@@ -58,8 +58,13 @@ export default function Gallery() {
 
   return (
     <div className="space-y-5">
+      {!features.patientImagePublicationEnabled && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          Patient media is stored as private operational documentation. Public publication is disabled until consent, retention, and withdrawal controls are implemented.
+        </div>
+      )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div><h1 className="text-xl font-bold text-gray-900 dark:text-white">{galleryLabel}</h1><p className="mt-1 text-sm text-gray-500">Live {patientLabel.toLowerCase()} {galleryLabel.toLowerCase()}. Demo media removed.</p></div>
+        <div><h1 className="text-xl font-bold text-gray-900 dark:text-white">{galleryLabel}</h1><p className="mt-1 text-sm text-gray-500">Private {patientLabel.toLowerCase()} files for authorized clinic operations.</p></div>
         <label className={`inline-flex cursor-pointer items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] px-4 py-2 text-sm font-medium text-white ${!clientId ? 'opacity-50' : ''}`}>
           <Upload className="h-4 w-4" /> {uploading ? 'Uploading...' : 'Upload'}
           <input type="file" accept="image/*" className="hidden" disabled={!clientId || uploading} onChange={upload} />

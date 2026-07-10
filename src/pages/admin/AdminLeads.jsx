@@ -41,11 +41,14 @@ export default function AdminLeads() {
   };
 
   const convert = async (lead) => {
-    if (!window.confirm(`Convert "${lead.clinicName}" into a live clinic? The owner will receive a set-password email.`)) return;
+    if (!window.confirm(`Convert "${lead.clinicName}" into a clinic? A temporary owner password will be generated and saved for admin handover.`)) return;
     setBusy(lead.id);
     setError('');
     try {
-      await fetchApi(`/admin/leads/${lead.id}/convert`, { method: 'POST' });
+      const res = await fetchApi(`/admin/leads/${lead.id}/convert`, { method: 'POST' });
+      if (res.ownerPassword) {
+        window.alert(`${res.message || 'Clinic created.'}\n\nOwner login\nEmail: ${res.ownerEmail}\nPassword: ${res.ownerPassword}`);
+      }
       await load();
     } catch (e) {
       setError(e.message);
