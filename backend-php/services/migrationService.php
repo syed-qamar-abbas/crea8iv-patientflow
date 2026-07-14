@@ -499,13 +499,26 @@ function pf_migration_migrate($db, $dir, $options = []) {
 
     pf_migration_acquire_lock($db, $owner);
     $appliedNow = [];
+    $migrationError = null;
     try {
         foreach ($pending as $file) {
             $executionMs = pf_migration_run_file($db, $file, $owner);
             $appliedNow[] = ['name' => $file['name'], 'executionMs' => $executionMs];
         }
-    } finally {
+    } catch (Throwable $e) {
+        $migrationError = $e;
+    }
+
+    try {
         pf_migration_release_lock($db);
+    } catch (Throwable $releaseError) {
+        if ($migrationError === null) {
+            throw $releaseError;
+        }
+    }
+
+    if ($migrationError !== null) {
+        throw $migrationError;
     }
 
     return ['applied' => $appliedNow, 'pending' => []];
