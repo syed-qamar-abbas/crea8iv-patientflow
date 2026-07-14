@@ -202,6 +202,36 @@ function pf_migration_is_duplicate_column_error($e) {
         || stripos($message, 'duplicate column name') !== false;
 }
 
+function pf_migration_is_duplicate_key_error($e) {
+    $message = $e->getMessage();
+    return strpos($message, '1061') !== false
+        || stripos($message, 'Duplicate key name') !== false;
+}
+
+function pf_migration_strip_leading_comments($statement) {
+    $statement = ltrim($statement);
+    do {
+        $original = $statement;
+        if (strpos($statement, '--') === 0) {
+            $newline = strpos($statement, "\n");
+            $statement = $newline === false ? '' : ltrim(substr($statement, $newline + 1));
+            continue;
+        }
+        if (strpos($statement, '#') === 0) {
+            $newline = strpos($statement, "\n");
+            $statement = $newline === false ? '' : ltrim(substr($statement, $newline + 1));
+            continue;
+        }
+        if (strpos($statement, '/*') === 0) {
+            $end = strpos($statement, '*/');
+            $statement = $end === false ? '' : ltrim(substr($statement, $end + 2));
+            continue;
+        }
+    } while ($statement !== $original);
+
+    return $statement;
+}
+
 function pf_migration_split_top_level_commas($sql) {
     $parts = [];
     $buffer = '';
@@ -261,6 +291,7 @@ function pf_migration_unquote_identifier($identifier) {
 }
 
 function pf_migration_parse_mysql_add_columns($statement) {
+    $statement = pf_migration_strip_leading_comments($statement);
     if (!preg_match('/^ALTER\s+TABLE\s+((?:`[^`]+`)|[A-Za-z_][A-Za-z0-9_]*)\s+(.+)$/is', trim($statement), $match)) {
         return null;
     }
@@ -270,19 +301,60 @@ function pf_migration_parse_mysql_add_columns($statement) {
     if (!$clauses) return null;
 
     $columns = [];
+    $otherClauses = [];
     foreach ($clauses as $clause) {
-        if (!preg_match('/^ADD\s+COLUMN\s+((?:`[^`]+`)|[A-Za-z_][A-Za-z0-9_]*)(\s+.+)$/is', trim($clause), $columnMatch)) {
+        $clause = trim($clause);
+        if (preg_match('/^ADD\s+COLUMN\s+((?:`[^`]+`)|[A-Za-z_][A-Za-z0-9_]*)(\s+.+)$/is', $clause, $columnMatch)) {
+            $columns[] = [
+                'name' => pf_migration_unquote_identifier($columnMatch[1]),
+                'definition' => trim($columnMatch[1] . $columnMatch[2]),
+            ];
+            continue;
+        }
+        if (preg_match('/^ADD\s+(?:UNIQUE\s+)?(?:KEY|INDEX)\s+/is', $clause)) {
+            $otherClauses[] = $clause;
+            continue;
+        }
+        if (preg_match('/^ADD\s+CONSTRAINT\s+/is', $clause)) {
+            $otherClauses[] = $clause;
+            continue;
+        }
+        if (preg_match('/^ADD\s+FOREIGN\s+KEY\s+/is', $clause)) {
+            $otherClauses[] = $clause;
+            continue;
+        }
+        if (preg_match('/^ADD\s+PRIMARY\s+KEY\s+/is', $clause)) {
+            $otherClauses[] = $clause;
+            continue;
+        }
+        if (preg_match('/^ADD\s+FULLTEXT\s+(?:KEY|INDEX)\s+/is', $clause)) {
+            $otherClauses[] = $clause;
+            continue;
+        }
+        if (preg_match('/^ADD\s+SPATIAL\s+(?:KEY|INDEX)\s+/is', $clause)) {
+            $otherClauses[] = $clause;
+            continue;
+        }
+        if (preg_match('/^ADD\s+CHECK\s+/is', $clause)) {
+            $otherClauses[] = $clause;
+            continue;
+        }
+        if (preg_match('/^ADD\s+\(/is', $clause)) {
+            $otherClauses[] = $clause;
+            continue;
+        }
+        if (!$columns) {
             return null;
         }
-        $columns[] = [
-            'name' => pf_migration_unquote_identifier($columnMatch[1]),
-            'definition' => trim($columnMatch[1] . $columnMatch[2]),
-        ];
+        return null;
     }
+
+    if (!$columns) return null;
 
     return [
         'table' => $tableName,
         'columns' => $columns,
+        'otherClauses' => $otherClauses,
     ];
 }
 
@@ -290,6 +362,24 @@ function pf_migration_mysql_column_exists($db, $tableName, $columnName) {
     $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
     $stmt->execute([$tableName, $columnName]);
     return (int)$stmt->fetchColumn() > 0;
+}
+
+function pf_migration_mysql_key_exists($db, $tableName, $keyName) {
+    $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?");
+    $stmt->execute([$tableName, $keyName]);
+    return (int)$stmt->fetchColumn() > 0;
+}
+
+function pf_migration_parse_mysql_add_key($statement) {
+    $statement = pf_migration_strip_leading_comments($statement);
+    if (!preg_match('/^ALTER\s+TABLE\s+((?:`[^`]+`)|[A-Za-z_][A-Za-z0-9_]*)\s+ADD\s+(?:UNIQUE\s+)?(?:KEY|INDEX)\s+((?:`[^`]+`)|[A-Za-z_][A-Za-z0-9_]*)\s+/is', trim($statement), $match)) {
+        return null;
+    }
+
+    return [
+        'table' => pf_migration_unquote_identifier($match[1]),
+        'key' => pf_migration_unquote_identifier($match[2]),
+    ];
 }
 
 function pf_migration_try_mysql_add_missing_columns($db, $statement) {
@@ -305,14 +395,66 @@ function pf_migration_try_mysql_add_missing_columns($db, $statement) {
         $db->exec('ALTER TABLE `' . str_replace('`', '``', $parsed['table']) . '` ADD COLUMN ' . $column['definition']);
     }
 
+    foreach ($parsed['otherClauses'] as $clause) {
+        pf_migration_exec_statement($db, 'ALTER TABLE `' . str_replace('`', '``', $parsed['table']) . '` ' . $clause);
+    }
+
+    return true;
+}
+
+function pf_migration_try_mysql_skip_existing_key($db, $statement) {
+    if (pf_migration_driver() !== 'mysql') return false;
+
+    $parsed = pf_migration_parse_mysql_add_key($statement);
+    if (!$parsed) return false;
+
+    return pf_migration_mysql_key_exists($db, $parsed['table'], $parsed['key']);
+}
+
+function pf_migration_try_mysql_alter_compatibility($db, $statement) {
+    if (pf_migration_driver() !== 'mysql') return false;
+
+    $parsed = pf_migration_parse_mysql_add_columns($statement);
+    if (!$parsed) return false;
+
+    $remainingClauses = [];
+    foreach ($parsed['columns'] as $column) {
+        if (!pf_migration_mysql_column_exists($db, $parsed['table'], $column['name'])) {
+            $remainingClauses[] = 'ADD COLUMN ' . $column['definition'];
+        }
+    }
+    foreach ($parsed['otherClauses'] as $clause) {
+        $remainingClauses[] = $clause;
+    }
+
+    if (!$remainingClauses) return true;
+
+    try {
+        $db->exec('ALTER TABLE `' . str_replace('`', '``', $parsed['table']) . '` ' . implode(', ', $remainingClauses));
+    } catch (Throwable $e) {
+        if (!pf_migration_is_duplicate_key_error($e)) {
+            throw $e;
+        }
+        foreach ($remainingClauses as $clause) {
+            pf_migration_exec_statement($db, 'ALTER TABLE `' . str_replace('`', '``', $parsed['table']) . '` ' . $clause);
+        }
+    }
+
     return true;
 }
 
 function pf_migration_exec_statement($db, $statement) {
+    if (pf_migration_try_mysql_alter_compatibility($db, $statement)) {
+        return;
+    }
+
     try {
         $db->exec($statement);
     } catch (Throwable $e) {
         if (pf_migration_is_duplicate_column_error($e) && pf_migration_try_mysql_add_missing_columns($db, $statement)) {
+            return;
+        }
+        if (pf_migration_is_duplicate_key_error($e) && pf_migration_try_mysql_skip_existing_key($db, $statement)) {
             return;
         }
         throw $e;

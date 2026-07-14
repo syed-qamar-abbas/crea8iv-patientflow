@@ -70,6 +70,11 @@ $addColumns = pf_migration_parse_mysql_add_columns("ALTER TABLE WhatsAppSetting 
 migration_check('mysql add-column parser reads table name', $addColumns['table'] === 'WhatsAppSetting');
 migration_check('mysql add-column parser reads all column names', array_column($addColumns['columns'], 'name') === ['quietHoursStart', 'lastWebhookError']);
 migration_check('mysql add-column parser rejects non-add-column alter', pf_migration_parse_mysql_add_columns('ALTER TABLE Clinic DROP COLUMN oldField') === null);
+$commentedAddColumns = pf_migration_parse_mysql_add_columns("-- migration note\nALTER TABLE `Clinic` ADD COLUMN `slug` VARCHAR(63) DEFAULT NULL, ADD UNIQUE KEY `UX_Clinic_Slug` (`slug`)");
+migration_check('mysql add-column parser ignores leading comments', $commentedAddColumns['table'] === 'Clinic' && $commentedAddColumns['columns'][0]['name'] === 'slug');
+migration_check('mysql add-column parser keeps follow-up key clauses', $commentedAddColumns['otherClauses'] === ['ADD UNIQUE KEY `UX_Clinic_Slug` (`slug`)']);
+$addKey = pf_migration_parse_mysql_add_key('ALTER TABLE `Clinic` ADD UNIQUE KEY `UX_Clinic_CustomDomain` (`customDomain`)');
+migration_check('mysql add-key parser reads key name', $addKey['table'] === 'Clinic' && $addKey['key'] === 'UX_Clinic_CustomDomain');
 
 migration_write($dir, '2026-01-02-beta.sqlite.sql', "CREATE TABLE Beta (id TEXT PRIMARY KEY, note TEXT);\n");
 migration_expect('edited applied migration is rejected by checksum', MigrationChecksumException::class, fn() => pf_migration_migrate($db, $dir, ['owner' => 'test']));
