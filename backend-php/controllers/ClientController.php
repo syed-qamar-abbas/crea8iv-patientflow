@@ -5,6 +5,26 @@ require_once __DIR__ . '/../services/dentalFinancialService.php';
 require_once __DIR__ . '/../services/clinicalSafetyPolicyService.php';
 
 class ClientController {
+    private function profileDataJson($value) {
+        if ($value === null || $value === '') return null;
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            if (!is_array($decoded)) send_error('profileData must be a JSON object', 400);
+            $value = $decoded;
+        }
+        if (!is_array($value)) send_error('profileData must be an object', 400);
+        $json = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($json === false || strlen($json) > 65535) send_error('profileData is invalid or too large', 400);
+        return $json;
+    }
+
+    private function workflowStage($value) {
+        if ($value === null || $value === '') return null;
+        $value = strtolower(trim((string)$value));
+        if (!preg_match('/^[a-z0-9_-]{1,80}$/', $value)) send_error('Invalid workflow stage', 400);
+        return $value;
+    }
+
     private function assertClientInClinic($db, $id, $clinicId) {
         $stmt = $db->prepare("SELECT id FROM Client WHERE id = ? AND clinicId = ?");
         $stmt->execute([$id, $clinicId]);
@@ -129,6 +149,8 @@ class ClientController {
         $medicalHistory = isset($input['medicalHistory']) ? (is_array($input['medicalHistory']) ? json_encode($input['medicalHistory']) : $input['medicalHistory']) : '[]';
         $notes = $input['notes'] ?? null;
         $referredBy = $input['referredBy'] ?? null;
+        $profileData = $this->profileDataJson($input['profileData'] ?? null);
+        $workflowStage = $this->workflowStage($input['workflowStage'] ?? null);
         $avatarColor = $input['avatarColor'] ?? '#6366f1';
         
         $initials = $input['initials'] ?? '';
@@ -138,9 +160,9 @@ class ClientController {
             $initials = substr($initials, 0, 2);
         }
 
-        $stmt = $db->prepare("INSERT INTO Client (id, clinicId, patientNo, name, phone, email, dob, gender, specialty, medicalHistory, avatarColor, initials, notes, referredBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt = $db->prepare("INSERT INTO Client (id, clinicId, patientNo, name, phone, email, dob, gender, specialty, medicalHistory, avatarColor, initials, notes, referredBy, profileData, workflowStage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
-            $id, $user['clinicId'], $patientNo, $name, $phone, $email, $dob, $gender, $specialty, $medicalHistory, $avatarColor, $initials, $notes, $referredBy
+            $id, $user['clinicId'], $patientNo, $name, $phone, $email, $dob, $gender, $specialty, $medicalHistory, $avatarColor, $initials, $notes, $referredBy, $profileData, $workflowStage
         ]);
 
         // Get created client
@@ -177,6 +199,14 @@ class ClientController {
         if (isset($input['medicalHistory'])) {
             $fields[] = "medicalHistory = ?";
             $params[] = is_array($input['medicalHistory']) ? json_encode($input['medicalHistory']) : $input['medicalHistory'];
+        }
+        if (array_key_exists('profileData', $input)) {
+            $fields[] = "profileData = ?";
+            $params[] = $this->profileDataJson($input['profileData']);
+        }
+        if (array_key_exists('workflowStage', $input)) {
+            $fields[] = "workflowStage = ?";
+            $params[] = $this->workflowStage($input['workflowStage']);
         }
 
         if (empty($fields)) {

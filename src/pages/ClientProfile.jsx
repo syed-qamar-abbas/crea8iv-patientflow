@@ -371,7 +371,7 @@ function TreatmentTimeline({ clientId }) {
 }
 
 export default function ClientProfile() {
-  const { term, features } = useClinic();
+  const { term, features, industryTemplate, capability } = useClinic();
   const patientLabel = term('patient', 'Patient');
   const patientsLabel = term('patients', 'Patients');
   const appointmentLabel = term('appointment', 'Appointment');
@@ -404,6 +404,11 @@ export default function ClientProfile() {
     upcoming: appointments.filter((a) => a.status !== 'cancelled' && a.status !== 'completed' && a.date >= new Date().toISOString().slice(0, 10)).length,
     completed: appointments.filter((a) => a.status === 'completed').length,
   }), [appointments]);
+  const profileData = useMemo(() => {
+    if (client?.profileData && typeof client.profileData === 'object') return client.profileData;
+    try { return JSON.parse(client?.profileData || '{}') || {}; } catch { return {}; }
+  }, [client?.profileData]);
+  const templateProfileFields = (industryTemplate.config.profile?.fields || []).filter(field => !['name', 'phone', 'email', 'notes', 'gender', 'dob'].includes(field.key));
 
   if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-indigo-500" /></div>;
   if (error || !client) {
@@ -448,6 +453,12 @@ export default function ClientProfile() {
               <p className="flex items-center gap-2 text-gray-600 dark:text-gray-300"><UserRound className="h-4 w-4 text-gray-400" /> {client.gender || 'Not specified'}</p>
               <p className="flex items-center gap-2 text-gray-600 dark:text-gray-300"><CreditCard className="h-4 w-4 text-gray-400" /> Due {money(client.outstandingBalance)}</p>
             </div>
+            {client.workflowStage && (
+              <div className="mt-4 border-t border-gray-100 pt-4 text-center dark:border-white/10">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Workflow Stage</p>
+                <div className="mt-2"><Badge label={client.workflowStage.replaceAll('_', ' ')} variant="pending" /></div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <InfoCard label="Total Spent" value={money(client.totalSpent)} />
@@ -468,6 +479,23 @@ export default function ClientProfile() {
         </aside>
 
         <main className="space-y-5">
+          {templateProfileFields.length > 0 && (
+            <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
+              <h3 className="text-sm font-black text-gray-950 dark:text-white">{industryTemplate.name} Details</h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {templateProfileFields.map(field => {
+                  const value = field.key === 'specialty' ? client.specialty : profileData[field.key];
+                  const display = Array.isArray(value) ? value.join(', ') : (value || 'Not provided');
+                  return (
+                    <div key={field.key} className="rounded-xl bg-gray-50 p-3 dark:bg-white/5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{field.label}</p>
+                      <p className="mt-1 text-sm font-semibold capitalize text-gray-800 dark:text-gray-100">{String(display).replaceAll('_', ' ')}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
             <h3 className="text-sm font-black text-gray-950 dark:text-white">{appointmentLabel} History</h3>
             <div className="mt-4 space-y-2">
@@ -493,11 +521,13 @@ export default function ClientProfile() {
             <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Not an authoritative clinical note or medical record.</p>
           </div>
 
-          <TreatmentPlan clientId={client.id} readOnly={clinicalReadOnly} />
-
-          <DentalProcedureDetails clientId={client.id} appointments={appointments} readOnly={clinicalReadOnly} />
-
-          <TreatmentTimeline clientId={client.id} />
+          {(capability('dentalContext') || industryTemplate.templateKey === 'healthcare') && (
+            <>
+              <TreatmentPlan clientId={client.id} readOnly={clinicalReadOnly} />
+              <DentalProcedureDetails clientId={client.id} appointments={appointments} readOnly={clinicalReadOnly} />
+              <TreatmentTimeline clientId={client.id} />
+            </>
+          )}
 
           <PatientDocuments clientId={client.id} />
         </main>

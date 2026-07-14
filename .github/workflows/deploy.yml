@@ -91,6 +91,11 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}" \
             backend-php/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/${{ secrets.SSH_USER }}/domains/crea8ivmedia.com/public_html/app/
 
+      - name: Run backend database migrations
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "cd /home/${{ secrets.SSH_USER }}/domains/crea8ivmedia.com/public_html/app && php scripts/migrate.php migrate"
+
       - name: Refresh pf-safe self-heal copy
         run: |
           ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \

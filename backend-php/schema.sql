@@ -101,6 +101,7 @@ CREATE TABLE `User` (
   `id` VARCHAR(36) NOT NULL,
   `clinicId` VARCHAR(36) NOT NULL,
   `name` VARCHAR(255) NOT NULL,
+  `username` VARCHAR(80) DEFAULT NULL,
   `email` VARCHAR(255) NOT NULL,
   `password` VARCHAR(255) NOT NULL,
   `role` VARCHAR(50) NOT NULL DEFAULT 'receptionist',
@@ -112,6 +113,7 @@ CREATE TABLE `User` (
   `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `UK_User_Email` (`email`),
+  UNIQUE KEY `UK_User_Username` (`username`),
   CONSTRAINT `FK_User_Clinic` FOREIGN KEY (`clinicId`) REFERENCES `Clinic` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -184,6 +186,8 @@ CREATE TABLE `Client` (
   `avatarColor` VARCHAR(50) NOT NULL DEFAULT '#6366f1',
   `initials` VARCHAR(10) DEFAULT NULL,
   `notes` TEXT DEFAULT NULL,
+  `profileData` JSON DEFAULT NULL,
+  `workflowStage` VARCHAR(80) DEFAULT NULL,
   `portalEmail` VARCHAR(255) DEFAULT NULL,
   `portalPasswordHash` VARCHAR(255) DEFAULT NULL,
   `referredBy` VARCHAR(255) DEFAULT NULL,
@@ -192,6 +196,7 @@ CREATE TABLE `Client` (
   UNIQUE KEY `UK_Client_Clinic_PatientNo` (`clinicId`, `patientNo`),
   KEY `IX_Client_Clinic_Status_Created` (`clinicId`, `status`, `createdAt`),
   KEY `IX_Client_Clinic_Name` (`clinicId`, `name`),
+  KEY `IX_Client_Clinic_WorkflowStage` (`clinicId`, `workflowStage`),
   CONSTRAINT `FK_Client_Clinic` FOREIGN KEY (`clinicId`) REFERENCES `Clinic` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -230,6 +235,7 @@ CREATE TABLE `Appointment` (
   `notes` TEXT DEFAULT NULL,
   `price` DOUBLE NOT NULL,
   `specialty` VARCHAR(100) NOT NULL,
+  `eventType` VARCHAR(80) NOT NULL DEFAULT 'appointment',
   `checkedIn` TINYINT(1) NOT NULL DEFAULT 0,
   `checkinTime` DATETIME DEFAULT NULL,
   `qrCode` TEXT DEFAULT NULL,
@@ -238,6 +244,7 @@ CREATE TABLE `Appointment` (
   KEY `IX_Appt_Clinic_Date_Status_Staff` (`clinicId`, `date`, `status`, `staffId`),
   KEY `IX_Appt_Clinic_Client_Date` (`clinicId`, `clientId`, `date`),
   KEY `IX_Appt_Clinic_Staff` (`clinicId`, `staffId`),
+  KEY `IX_Appt_Clinic_EventType_Date` (`clinicId`, `eventType`, `date`),
   CONSTRAINT `FK_Appointment_Clinic` FOREIGN KEY (`clinicId`) REFERENCES `Clinic` (`id`) ON DELETE CASCADE,
   CONSTRAINT `FK_Appointment_Branch` FOREIGN KEY (`branchId`) REFERENCES `Branch` (`id`) ON DELETE SET NULL,
   CONSTRAINT `FK_Appointment_Client` FOREIGN KEY (`clientId`) REFERENCES `Client` (`id`) ON DELETE CASCADE,

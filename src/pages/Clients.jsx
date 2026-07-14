@@ -13,12 +13,60 @@ const tierColors = { Platinum: '#64748b', Gold: '#f59e0b', Silver: '#94a3b8', Br
 
 const emptyForm = {
   name: '', phone: '', email: '', gender: 'Female', dob: '',
-  loyaltyTier: 'Bronze', status: 'active',
+  loyaltyTier: 'Bronze', status: 'active', workflowStage: '', profileData: {},
 };
 
-function ClientFormModal({ isOpen, onClose, onSave, target, saving, term }) {
+const CORE_PROFILE_FIELDS = new Set(['name', 'phone', 'email', 'gender', 'dob', 'notes', 'specialty']);
+
+function parseJsonObject(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  try { const parsed = JSON.parse(value || '{}'); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; }
+  catch { return {}; }
+}
+
+function templateFields(template) {
+  const configured = template.config.profile?.fields || [];
+  const clinicVerticals = ['healthcare', 'dental', 'aesthetics', 'dental_aesthetics'];
+  if (!clinicVerticals.includes(template.config.vertical)) return configured;
+  const keys = new Set(configured.map(field => field.key));
+  return [
+    ...configured,
+    ...(!keys.has('gender') ? [{ key: 'gender', label: 'Gender', type: 'select', options: ['Female', 'Male', 'Other'] }] : []),
+    ...(!keys.has('dob') ? [{ key: 'dob', label: 'Date of Birth', type: 'date' }] : []),
+  ];
+}
+
+function ProfileField({ field, value, onChange, inputClassName }) {
+  const options = (field.options || []).map(option => typeof option === 'string' ? { value: option, label: option } : option);
+  if (field.type === 'textarea') {
+    return <textarea rows="3" value={value || ''} onChange={e => onChange(e.target.value)} className={inputClassName} />;
+  }
+  if (field.type === 'select') {
+    return (
+      <select value={value || ''} onChange={e => onChange(e.target.value)} className={inputClassName}>
+        <option value="">Select {field.label.toLowerCase()}...</option>
+        {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    );
+  }
+  if (field.type === 'multi_select') {
+    const selected = Array.isArray(value) ? value : [];
+    return (
+      <select multiple value={selected} onChange={e => onChange(Array.from(e.target.selectedOptions, option => option.value))} className={`${inputClassName} min-h-24`}>
+        {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    );
+  }
+  const type = ['date', 'email', 'number'].includes(field.type) ? field.type : (['money', 'money_range'].includes(field.type) ? 'number' : field.type === 'phone' ? 'tel' : 'text');
+  return <input type={type} min={type === 'number' ? 0 : undefined} value={value ?? ''} onChange={e => onChange(e.target.value)} className={inputClassName} />;
+}
+
+function ClientFormModal({ isOpen, onClose, onSave, target, saving, term, template }) {
   const isEdit = !!target;
   const [form, setForm] = useState(emptyForm);
+  const fields = templateFields(template);
+  const stages = template.config.workflow?.stages || [];
+  const isPipeline = Boolean(template.config.capabilities?.pipeline);
 
   useEffect(() => {
     if (target) {
@@ -30,68 +78,74 @@ function ClientFormModal({ isOpen, onClose, onSave, target, saving, term }) {
         dob: target.dob ? String(target.dob).slice(0, 10) : '',
         loyaltyTier: target.loyaltyTier || 'Bronze',
         status: target.status || 'active',
+        notes: target.notes || '',
+        specialty: (() => { try { const value = JSON.parse(target.specialty || 'null'); return Array.isArray(value) ? (value[0] || '') : (value || ''); } catch { return target.specialty || ''; } })(),
+        workflowStage: target.workflowStage || stages[0] || '',
+        profileData: parseJsonObject(target.profileData),
       });
     } else {
-      setForm(emptyForm);
+      setForm({ ...emptyForm, workflowStage: stages[0] || '', profileData: {} });
     }
-  }, [target, isOpen]);
+  }, [target, isOpen, template.templateKey]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const submit = () => {
-    if (!form.name.trim() || !form.phone.trim()) {
-      alert('Name and phone are required.');
-      return;
-    }
-    onSave(form);
+  const fieldValue = (key) => CORE_PROFILE_FIELDS.has(key) ? form[key] : form.profileData?.[key];
+  const setFieldValue = (key, value) => {
+    if (CORE_PROFILE_FIELDS.has(key)) set(key, value);
+    else setForm(current => ({ ...current, profileData: { ...(current.profileData || {}), [key]: value } }));
   };
 
+  const submit = () => {
+    const missing = fields.find(field => field.required && !String(fieldValue(field.key) || '').trim());
+    if (missing) {
+      alert(`${missing.label} is required.`);
+      return;
+    }
+    onSave({
+      name: form.name, phone: form.phone, email: form.email, gender: form.gender, dob: form.dob,
+      notes: form.notes, specialty: form.specialty ? [form.specialty] : undefined,
+      loyaltyTier: form.loyaltyTier, status: form.status, workflowStage: form.workflowStage || null,
+      profileData: form.profileData || {},
+    });
+  };
+
+  const inputCls = "w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300";
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? `Edit ${term('patient', 'Patient')}` : `Add New ${term('patient', 'Patient')}`} size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? `Edit ${term('patient', 'Patient')}` : `Add New ${term('patient', 'Patient')}`} size="lg">
       <div className="space-y-4">
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Full Name *</label>
-          <input value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Ayesha Khan"
-            className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+          <p className="text-xs font-bold text-indigo-900 dark:text-indigo-200">{template.name} profile</p>
+          <p className="mt-0.5 text-[11px] text-indigo-600 dark:text-indigo-300">Fields and workflow are controlled by the selected industry template.</p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Phone *</label>
-            <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+92 300 0000000"
-              className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Email</label>
-            <input value={form.email} onChange={e => set('email', e.target.value)} placeholder="name@example.com"
-              className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-          </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {fields.map(field => (
+            <div key={field.key} className={field.type === 'textarea' || field.type === 'multi_select' ? 'sm:col-span-2' : ''}>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{field.label}{field.required ? ' *' : ''}</label>
+              <ProfileField field={field} value={fieldValue(field.key)} onChange={value => setFieldValue(field.key, value)} inputClassName={inputCls} />
+            </div>
+          ))}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Gender</label>
-            <select value={form.gender} onChange={e => set('gender', e.target.value)}
-              className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm">
-              <option>Female</option><option>Male</option><option>Other</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Date of Birth</label>
-            <input type="date" value={form.dob} onChange={e => set('dob', e.target.value)}
-              className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
+        <div className={`grid gap-3 ${isPipeline ? 'grid-cols-2' : 'grid-cols-3'}`}>
+          {isPipeline && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Workflow Stage</label>
+              <select value={form.workflowStage} onChange={e => set('workflowStage', e.target.value)} className={inputCls}>
+                {stages.map(stage => <option key={stage} value={stage}>{stage.replaceAll('_', ' ')}</option>)}
+              </select>
+            </div>
+          )}
+          {!isPipeline && <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Loyalty Tier</label>
             <select value={form.loyaltyTier} onChange={e => set('loyaltyTier', e.target.value)}
-              className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm">
+              className={inputCls}>
               <option>Bronze</option><option>Silver</option><option>Gold</option><option>Platinum</option>
             </select>
-          </div>
+          </div>}
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Status</label>
             <select value={form.status} onChange={e => set('status', e.target.value)}
-              className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm">
+              className={inputCls}>
               <option value="active">Active</option><option value="inactive">Inactive</option>
             </select>
           </div>
@@ -172,6 +226,7 @@ function ClientCard({ client, onClick, onEdit, onDelete }) {
       <div className="flex items-center gap-1.5 flex-wrap mb-3">
         {client.patientNo && <Badge label={client.patientNo} variant="active" />}
         {client.loyaltyTier && <Badge label={client.loyaltyTier} variant={client.loyaltyTier} />}
+        {client.workflowStage && <Badge label={client.workflowStage.replaceAll('_', ' ')} variant="pending" />}
       </div>
 
       <div className={`border-t border-gray-50 dark:border-white/10 pt-3 grid gap-2 ${canViewBusinessFinancials() ? 'grid-cols-3' : 'grid-cols-2'}`}>
@@ -198,7 +253,7 @@ function ClientCard({ client, onClick, onEdit, onDelete }) {
 
 export default function Clients() {
   const navigate = useNavigate();
-  const { term } = useClinic();
+  const { term, industryTemplate } = useClinic();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [tierFilter, setTierFilter] = useState('all');
@@ -443,6 +498,7 @@ export default function Clients() {
         target={editTarget}
         saving={saving}
         term={term}
+        template={industryTemplate}
       />
       <DeleteConfirmModal
         isOpen={!!deleteTarget}

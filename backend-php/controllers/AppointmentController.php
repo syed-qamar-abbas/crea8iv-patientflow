@@ -6,6 +6,12 @@ require_once __DIR__ . '/../services/checkinTokenService.php';
 require_once __DIR__ . '/../services/qrService.php';
 
 class AppointmentController {
+    private function eventType($value) {
+        $value = strtolower(trim((string)($value ?: 'appointment')));
+        if (!preg_match('/^[a-z0-9_-]{1,80}$/', $value)) send_error('Invalid event type', 400);
+        return $value;
+    }
+
     private function validateDateTimeRange($date, $startTime, $endTime) {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)
             || !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $startTime)
@@ -232,6 +238,7 @@ class AppointmentController {
         $room = $input['room'] ?? null;
         $notes = $input['notes'] ?? null;
         $status = $input['status'] ?? 'pending';
+        $eventType = $this->eventType($input['eventType'] ?? 'appointment');
 
         if (empty($clientId) || empty($staffId) || empty($date) || empty($startTime) || empty($endTime)) {
             send_error('clientId, staffId, date, startTime, and endTime are required', 400);
@@ -256,9 +263,9 @@ class AppointmentController {
             send_error('Time slot conflict: staff already has an appointment in this period', 409, ['conflicts' => $conflicts]);
         }
 
-        $stmt = $db->prepare("INSERT INTO Appointment (id, clinicId, branchId, clientId, staffId, serviceId, date, startTime, endTime, duration, status, room, notes, price, specialty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt = $db->prepare("INSERT INTO Appointment (id, clinicId, branchId, clientId, staffId, serviceId, date, startTime, endTime, duration, status, room, notes, price, specialty, eventType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
-            $id, $user['clinicId'], $branchId, $clientId, $staffId, $serviceId, $date, $startTime, $endTime, $duration, $status, $room, $notes, $price, $specialty
+            $id, $user['clinicId'], $branchId, $clientId, $staffId, $serviceId, $date, $startTime, $endTime, $duration, $status, $room, $notes, $price, $specialty, $eventType
         ]);
 
         $stmt = $db->prepare("SELECT * FROM Appointment WHERE id = ?");
@@ -314,7 +321,8 @@ class AppointmentController {
         if (!isset($input['specialty']) && (isset($input['serviceId']) || isset($input['staffId']))) {
             $input['specialty'] = $this->resolveSpecialty($db, $serviceId, $staffId, $existing['specialty'] ?? '');
         }
-        $updatable = ['branchId', 'clientId', 'staffId', 'serviceId', 'date', 'startTime', 'endTime', 'duration', 'status', 'room', 'notes', 'price', 'specialty'];
+        if (array_key_exists('eventType', $input)) $input['eventType'] = $this->eventType($input['eventType']);
+        $updatable = ['branchId', 'clientId', 'staffId', 'serviceId', 'date', 'startTime', 'endTime', 'duration', 'status', 'room', 'notes', 'price', 'specialty', 'eventType'];
         foreach ($updatable as $key) {
             if (isset($input[$key])) {
                 $fields[] = "$key = ?";

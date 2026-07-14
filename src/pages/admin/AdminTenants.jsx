@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Archive, Loader2, PlayCircle, PauseCircle, CalendarPlus, Globe, Plus, Pencil, LogIn, Search, Copy, Check, X, Users as UsersIcon, Building2, CreditCard, Clock, MessageCircle, Bot, KeyRound, Megaphone, Facebook, Database, Eye, EyeOff } from 'lucide-react';
-import { fetchApi } from '../../config/api';
+import { fetchApi, fetchPublicApi } from '../../config/api';
 import Modal from '../../components/ui/Modal';
 import ColorPicker from '../../components/ui/ColorPicker';
 import { enterImpersonation } from '../../config/impersonation';
@@ -77,6 +77,46 @@ const prettyTemplate = (key = 'healthcare') => String(key || 'healthcare')
   .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
   .join(' ');
 
+function suggestUsername(value) {
+  return String(value || '')
+    .toLowerCase()
+    .split('@')[0]
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/[._-]{2,}/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 24);
+}
+
+function useUsernameAvailability(username, excludeUserId = '') {
+  const [state, setState] = useState({ status: 'idle', message: '' });
+  useEffect(() => {
+    const value = String(username || '').trim().toLowerCase();
+    if (!value) {
+      setState({ status: 'idle', message: '' });
+      return undefined;
+    }
+    if (value.length < 3) {
+      setState({ status: 'invalid', message: 'Use at least 3 characters.' });
+      return undefined;
+    }
+    setState({ status: 'checking', message: 'Checking availability...' });
+    const timer = setTimeout(async () => {
+      try {
+        const qs = new URLSearchParams({ username: value });
+        if (excludeUserId) qs.set('excludeUserId', excludeUserId);
+        const res = await fetchPublicApi(`/auth/username-availability?${qs.toString()}`);
+        if (!res.valid) setState({ status: 'invalid', message: res.message || 'Invalid username.' });
+        else if (res.available) setState({ status: 'available', message: 'Username is available.' });
+        else setState({ status: 'taken', message: 'Username is already taken.' });
+      } catch (e) {
+        setState({ status: 'invalid', message: e.message || 'Could not check username.' });
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [username, excludeUserId]);
+  return state;
+}
+
 export default function AdminTenants() {
   const [tenants, setTenants] = useState(null);
   const [error, setError] = useState('');
@@ -148,7 +188,7 @@ export default function AdminTenants() {
   };
 
   const activate = (t) => {
-    const cycle = window.prompt('Billing cycle: type "monthly" (default PKR 50,000) or "annual" (Starter yearly offer PKR 50,000 upfront)', 'monthly');
+    const cycle = window.prompt('Billing cycle: type "monthly" (default PKR 25,000) or "annual" (Starter yearly offer PKR 150,000 upfront)', 'monthly');
     if (!cycle || !['monthly', 'annual'].includes(cycle)) return;
     run(t.id, () => fetchApi(`/admin/tenants/${t.id}/activate`, { method: 'POST', body: JSON.stringify({ billingCycle: cycle }) }));
   };
@@ -506,7 +546,7 @@ function TenantDrawer({ id, onClose, onManage, onEdit, onChanged }) {
               <Row label="Type">{data.clinicType || '—'}</Row>
               <Row label="Email">{data.email || '—'}</Row>
               <Row label="Phone">{data.phone || '—'}</Row>
-              <Row label="Owner">{owner ? <>{owner.name}<span className="block text-xs text-gray-400">{owner.email}</span></> : 'No owner'}</Row>
+              <Row label="Owner">{owner ? <>{owner.name}<span className="block text-xs text-gray-400">@{owner.username || 'not-set'} · {owner.email}</span></> : 'No owner'}</Row>
               <Row label="Portal link">{data.slug ? <a href={`https://crea8ivmedia.com/clinic/${data.slug}`} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline break-all">crea8ivmedia.com/clinic/{data.slug}</a> : '—'}</Row>
               <Row label="Custom domain">{data.customDomain ? <>{data.customDomain}<span className="block text-xs text-gray-400">{data.domainStatus} · SSL {data.sslStatus || 'n/a'}</span></> : 'None (uses portal link)'}</Row>
               <Row label="Subscription">{expiry ? <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-400" /><ExpiryBadge date={expiry} status={data.status} /></span> : '—'}</Row>
@@ -528,7 +568,7 @@ function TenantDrawer({ id, onClose, onManage, onEdit, onChanged }) {
                 <div className="space-y-1">
                   {data.users.map((u) => (
                     <div key={u.id} className="flex items-center justify-between text-sm px-3 py-2 rounded-lg bg-gray-50 dark:bg-white/5">
-                      <span className="text-gray-800 dark:text-gray-100">{u.name} <span className="text-xs text-gray-400">· {u.role}</span></span>
+                      <span className="text-gray-800 dark:text-gray-100">{u.name} <span className="text-xs text-gray-400">· @{u.username || 'not-set'} · {u.role}</span></span>
                       <span className="text-[11px] text-gray-400">{u.lastLogin ? `seen ${String(u.lastLogin).slice(0, 10)}` : 'never'}</span>
                     </div>
                   ))}
@@ -704,7 +744,7 @@ function TenantAutomationControls({ tenantId }) {
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-300">Owner login credentials</p>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">Admin-visible owner login for handover and support.</p>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">Admin-visible owner username and password for handover and support.</p>
           </div>
           <button
             onClick={resetOwnerPassword}
@@ -716,8 +756,9 @@ function TenantAutomationControls({ tenantId }) {
         </div>
         <div className="grid gap-2">
           <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-900">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Owner email</p>
-            <p className="break-all text-sm font-semibold text-gray-800 dark:text-gray-100">{data.credentials?.email || 'Not stored yet'}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Owner username</p>
+            <p className="break-all text-sm font-semibold text-gray-800 dark:text-gray-100">{data.credentials?.username ? `@${data.credentials.username}` : 'Not stored yet'}</p>
+            {data.credentials?.email && <p className="mt-1 break-all text-[11px] text-gray-400">Contact email: {data.credentials.email}</p>}
           </div>
           <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-900">
             <div className="flex items-center justify-between gap-2">
@@ -839,10 +880,11 @@ function CreateClinicModal({ onClose, onCreated }) {
     name: '', email: '', phone: '', clinicType: 'dental', address: '',
     status: 'trial', trialDays: 14,
     primaryColor: '#0f766e', secondaryColor: '#14b8a6',
-    ownerName: '', ownerEmail: '', ownerPassword: '',
+    ownerName: '', ownerUsername: '', ownerEmail: '', ownerPassword: '',
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const ownerUsername = useUsernameAvailability(f.ownerUsername);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
   const submit = async () => {
@@ -852,11 +894,11 @@ function CreateClinicModal({ onClose, onCreated }) {
         name: f.name, email: f.email, phone: f.phone, clinicType: f.clinicType, address: f.address,
         status: f.status, trialDays: Number(f.trialDays) || 14,
         primaryColor: f.primaryColor, secondaryColor: f.secondaryColor,
-        owner: { name: f.ownerName, email: f.ownerEmail || f.email, password: f.ownerPassword },
+        owner: { name: f.ownerName, username: f.ownerUsername, email: f.ownerEmail || f.email, password: f.ownerPassword },
       };
       const res = await fetchApi('/admin/tenants', { method: 'POST', body: JSON.stringify(body) });
       if (res.ownerPassword) {
-        window.alert(`${res.message || 'Clinic created.'}\n\nOwner login\nEmail: ${res.ownerEmail}\nPassword: ${res.ownerPassword}`);
+        window.alert(`${res.message || 'Clinic created.'}\n\nOwner login\nUsername: ${res.ownerUsername}\nPassword: ${res.ownerPassword}\nContact email: ${res.ownerEmail}`);
       } else {
         window.alert(res.message || 'Clinic created.');
       }
@@ -876,7 +918,7 @@ function CreateClinicModal({ onClose, onCreated }) {
         <section className="space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Clinic details</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="sm:col-span-2"><label className={labelCls}>Clinic name *</label><input className={field} value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="The Smile Experts" /></div>
+            <div className="sm:col-span-2"><label className={labelCls}>Clinic name *</label><input className={field} value={f.name} onChange={(e) => setF((p) => ({ ...p, name: e.target.value, ownerUsername: p.ownerUsername || suggestUsername(e.target.value) }))} placeholder="The Smile Experts" /></div>
             <div><label className={labelCls}>Clinic email</label><input className={field} value={f.email} onChange={(e) => set('email', e.target.value)} placeholder="hello@clinic.com" /></div>
             <div><label className={labelCls}>Phone</label><input className={field} value={f.phone} onChange={(e) => set('phone', e.target.value)} placeholder="+92 300 ..." /></div>
             <div><label className={labelCls}>Type</label>
@@ -891,8 +933,15 @@ function CreateClinicModal({ onClose, onCreated }) {
         <section className="space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Initial owner account</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><label className={labelCls}>Owner name</label><input className={field} value={f.ownerName} onChange={(e) => set('ownerName', e.target.value)} placeholder="Dr. Name" /></div>
-            <div><label className={labelCls}>Owner login email *</label><input className={field} value={f.ownerEmail} onChange={(e) => set('ownerEmail', e.target.value)} placeholder="owner@clinic.com" /></div>
+            <div><label className={labelCls}>Owner name</label><input className={field} value={f.ownerName} onChange={(e) => setF((p) => ({ ...p, ownerName: e.target.value, ownerUsername: p.ownerUsername || suggestUsername(e.target.value) }))} placeholder="Dr. Name" /></div>
+            <div>
+              <label className={labelCls}>Owner username *</label>
+              <input className={field} value={f.ownerUsername} onChange={(e) => set('ownerUsername', e.target.value.toLowerCase())} placeholder="dr-smile" autoComplete="username" />
+              {ownerUsername.message && (
+                <p className={`mt-1 text-[11px] font-semibold ${ownerUsername.status === 'available' ? 'text-emerald-600' : ownerUsername.status === 'checking' ? 'text-gray-400' : 'text-rose-600'}`}>{ownerUsername.message}</p>
+              )}
+            </div>
+            <div className="sm:col-span-2"><label className={labelCls}>Owner contact email *</label><input className={field} type="email" value={f.ownerEmail} onChange={(e) => setF((p) => ({ ...p, ownerEmail: e.target.value, ownerUsername: p.ownerUsername || suggestUsername(e.target.value) }))} placeholder="owner@clinic.com" /></div>
             <div className="sm:col-span-2">
               <label className={labelCls}>Initial password</label>
               <input className={field} type="text" value={f.ownerPassword} onChange={(e) => set('ownerPassword', e.target.value)} placeholder="Leave blank to auto-generate" />
@@ -921,7 +970,7 @@ function CreateClinicModal({ onClose, onCreated }) {
 
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:hover:bg-white/10">Cancel</button>
-          <button onClick={submit} disabled={saving || !f.name || !(f.ownerEmail || f.email)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-bold">
+          <button onClick={submit} disabled={saving || !f.name || !(f.ownerEmail || f.email) || ownerUsername.status !== 'available'} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-bold">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />} Create clinic
           </button>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Archive, Bot, Building2, Calendar, Database, DollarSign, Facebook, FileBarChart, FlaskConical, Image, LifeBuoy, Loader2, Megaphone, MessageCircle, MessageSquare, Package, Receipt, Settings, Shield, Stethoscope, Users, UserCheck, WalletCards } from 'lucide-react';
+import { Archive, ArrowRight, Bot, Building2, Calendar, Database, DollarSign, Facebook, FileBarChart, FlaskConical, Image, LifeBuoy, Loader2, Megaphone, MessageCircle, MessageSquare, Package, Receipt, Settings, Shield, Stethoscope, Target, Users, UserCheck, WalletCards } from 'lucide-react';
 import { fetchApi, peekApiCacheByPrefix } from '../config/api';
 import { CardGridSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import { useClinic } from '../context/ClinicContext';
@@ -79,6 +79,12 @@ export default function Dashboard() {
   const activeStaff = data.staff.filter(member => member.status === 'active');
   const pendingInvoices = data.invoices.filter(inv => inv.status === 'pending' || inv.status === 'partial');
   const topStaff = useMemo(() => activeStaff.slice().sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0)).slice(0, 5), [activeStaff]);
+  const goal = industryTemplate.config.primaryGoal || { label: `Book ${term('appointment', 'Appointment')}` };
+  const workflowStages = industryTemplate.config.workflow?.stages || [];
+  const pipelineCounts = useMemo(() => workflowStages.map(stage => ({
+    stage,
+    count: data.clients.filter(client => (client.workflowStage || workflowStages[0]) === stage).length,
+  })), [data.clients, workflowStages.join('|')]);
 
   if (loading && !hasSeed) {
     return <div className="space-y-4"><CardGridSkeleton count={4} /><TableSkeleton rows={6} cols={4} /></div>;
@@ -87,6 +93,31 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <SetupAlert />
+      <div className="overflow-hidden rounded-2xl bg-slate-950 px-5 py-5 text-white shadow-lg">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-white/10 p-2.5"><Target className="h-5 w-5 text-[var(--primary)]" /></div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">{industryTemplate.name}</p>
+              <h1 className="mt-1 text-xl font-black">{goal.label}</h1>
+              <p className="mt-1 text-xs text-white/55">Your dashboard, records and schedule follow this niche workflow.</p>
+            </div>
+          </div>
+          <Link to="/appointments" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110">
+            {industryTemplate.config.dashboard.primaryAction || goal.label}<ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+        {industryTemplate.config.capabilities?.pipeline && (
+          <div className="mt-5 flex gap-2 overflow-x-auto border-t border-white/10 pt-4">
+            {pipelineCounts.map(({ stage, count }) => (
+              <div key={stage} className="min-w-28 rounded-xl bg-white/[0.07] px-3 py-2">
+                <p className="text-[10px] font-semibold capitalize text-white/50">{stage.replaceAll('_', ' ')}</p>
+                <p className="mt-1 text-lg font-black">{count}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard title={industryTemplate.config.dashboard.todayAppointments} value={String(todayAppts.length)} icon={Calendar} />
         {canSeeFinancials
@@ -162,7 +193,9 @@ export default function Dashboard() {
         <h2 className="text-sm font-bold text-gray-950 dark:text-white">{industryTemplate.config.dashboard.portalFeatures}</h2>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">All modules below are live entry points. CRUD-enabled modules update the database directly.</p>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {portalModules.filter(({ to }) => canAccessPath(to, role)).map(({ key, to }) => {
+          {portalModules.filter(({ key, to }) => (
+            canAccessPath(to, role) && industryTemplate.config.modules?.[key]?.visible !== false
+          )).map(({ key, to }) => {
             const mod = industryTemplate.templateKey === 'healthcare'
               ? (industryTemplate.config.dashboardModules?.[key] || industryTemplate.config.modules?.[key] || {})
               : (industryTemplate.config.modules?.[key] || industryTemplate.config.dashboardModules?.[key] || {});

@@ -37,7 +37,7 @@ const FEATURES = [
 
 export default function Login() {
   const { clinicInfo, isPlatform } = useClinic();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
@@ -50,8 +50,8 @@ export default function Login() {
     try {
       const data = await fetchApi('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
+          body: JSON.stringify({
+          username: username.trim().toLowerCase(),
           password,
         }),
       });
@@ -64,7 +64,7 @@ export default function Login() {
       // hydrate tenant branding and plan features for the signed-in clinic.
       window.location.assign(appPath(data.user.role === 'superadmin' ? '/admin' : '/dashboard'));
     } catch (err) {
-      setError(err.message || 'Invalid email or password.');
+      setError(err.message || 'Invalid username or password.');
     } finally {
       setLoading(false);
     }
@@ -100,15 +100,15 @@ export default function Login() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                  Email address
+                  Username
                 </label>
                 <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={`you@${clinicInfo.website || 'clinic.com'}`}
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder={isPlatform ? 'superadmin' : 'frontdesk'}
                   required
-                  autoComplete="email"
+                  autoComplete="username"
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40 focus:border-[var(--primary)]/40 transition-all"
                 />
               </div>

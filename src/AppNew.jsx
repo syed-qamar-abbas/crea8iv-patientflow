@@ -59,6 +59,14 @@ const FEATURE_ROUTES = {
   imports: { key: 'importsEnabled', label: 'Import Center' },
 };
 
+const MODULE_BY_PATH = {
+  reception: 'reception', appointments: 'appointments', clients: 'clients', clinical: 'clinical',
+  lab: 'lab', staff: 'staff', services: 'services', financials: 'financials', settings: 'settings',
+  packages: 'packages', invoices: 'invoices', inventory: 'inventory', gallery: 'gallery', feedback: 'feedback',
+  marketing: 'marketing', whatsapp: 'whatsapp', reports: 'reports', audit: 'audit', branches: 'branches',
+  ai: 'ai', 'ai-receptionist': 'aiReceptionist', 'meta-leads': 'metaLeads', imports: 'imports', support: 'support',
+};
+
 function ProtectedRoute({ children }) {
   const isAuth = localStorage.getItem('clinic_auth') === 'true';
   if (!isAuth) return <Navigate to="/login" replace />;
@@ -81,11 +89,15 @@ function SuperadminRoute({ children }) {
 }
 
 function RoleRoute({ path, children }) {
-  return canAccessPath(`/${path}`) ? children : <Navigate to="/dashboard" replace />;
+  const { featuresLoaded, moduleVisible } = useClinic();
+  if (!featuresLoaded) return <div className="flex min-h-[55vh] items-center justify-center p-6 text-sm text-gray-400">Loading…</div>;
+  if (!canAccessPath(`/${path}`)) return <Navigate to="/dashboard" replace />;
+  if (!moduleVisible(MODULE_BY_PATH[path] || path)) return <Navigate to="/dashboard" replace />;
+  return children;
 }
 
 function FeatureRoute({ path, children }) {
-  const { features, featuresLoaded } = useClinic();
+  const { features, featuresLoaded, moduleVisible } = useClinic();
   const feature = FEATURE_ROUTES[path];
   if (!canAccessPath(`/${path}`)) return <Navigate to="/dashboard" replace />;
   // Wait for /features to resolve so a direct URL load doesn't wrongly lock/redirect.
@@ -96,6 +108,7 @@ function FeatureRoute({ path, children }) {
       </div>
     );
   }
+  if (!moduleVisible(MODULE_BY_PATH[path] || path)) return <Navigate to="/dashboard" replace />;
   if (feature && !features[feature.key]) {
     return (
       <div className="flex min-h-[55vh] items-center justify-center p-6">

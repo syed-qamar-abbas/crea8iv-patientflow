@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../services/mailService.php';
+require_once __DIR__ . '/../services/usernameService.php';
 
 class AuthController {
 
@@ -20,19 +21,19 @@ class AuthController {
         return 'unknown';
     }
 
-    private function recordAttempt($db, $email, $success) {
+    private function recordAttempt($db, $identifier, $success) {
         // createdAt written from PHP so window comparisons use one clock
         // (DB CURRENT_TIMESTAMP may be UTC while PHP runs Asia/Karachi)
         $stmt = $db->prepare("INSERT INTO LoginAttempt (email, ip, success, createdAt) VALUES (?, ?, ?, ?)");
-        $stmt->execute([strtolower($email), $this->clientIp(), $success ? 1 : 0, date('Y-m-d H:i:s')]);
+        $stmt->execute([strtolower($identifier), $this->clientIp(), $success ? 1 : 0, date('Y-m-d H:i:s')]);
     }
 
-    private function assertNotRateLimited($db, $email) {
+    private function assertNotRateLimited($db, $identifier) {
         $windowEmail = date('Y-m-d H:i:s', time() - 15 * 60);
         $stmt = $db->prepare(
             "SELECT COUNT(*) FROM LoginAttempt WHERE email = ? AND success = 0 AND createdAt > ?"
         );
-        $stmt->execute([strtolower($email), $windowEmail]);
+        $stmt->execute([strtolower($identifier), $windowEmail]);
         if ((int)$stmt->fetchColumn() >= LOGIN_MAX_ATTEMPTS_EMAIL) {
             send_error('Too many failed attempts. Please try again in 15 minutes.', 429);
         }
@@ -47,12 +48,12 @@ class AuthController {
         }
     }
 
-    private function validatePassword($password, $email = '') {
+    private function validatePassword($password, $identifier = '') {
         if (strlen($password) < 10) {
             send_error('Password must be at least 10 characters long', 400);
         }
-        if ($email !== '' && strcasecmp($password, $email) === 0) {
-            send_error('Password cannot be the same as your email', 400);
+        if ($identifier !== '' && strcasecmp($password, $identifier) === 0) {
+            send_error('Password cannot be the same as your username', 400);
         }
         $common = ['password123', '1234567890', 'qwertyuiop', 'changeme123',
                    'password1234', 'abc1234567', 'clinic12345'];
@@ -106,18 +107,28 @@ class AuthController {
     public function register($input, $user) {
         $clinicName = $input['clinicName'] ?? '';
         $name = $input['name'] ?? '';
+        $usernameInput = $input['username'] ?? '';
         $email = strtolower(trim($input['email'] ?? ''));
         $password = $input['password'] ?? '';
 
-        if (empty($clinicName) || empty($name) || empty($email) || empty($password)) {
+        if (empty($clinicName) || empty($name) || empty($usernameInput) || empty($email) || empty($password)) {
             send_error('All fields are required', 400);
+        }
+        try {
+            $username = pf_username_validate($usernameInput);
+        } catch (InvalidArgumentException $e) {
+            send_error($e->getMessage(), 400);
         }
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             send_error('A valid email address is required', 400);
         }
-        $this->validatePassword($password, $email);
+        $this->validatePassword($password, $username);
 
         $db = DB::getConnection();
+
+        if (!pf_username_available($db, $username)) {
+            send_error('Username already registered', 409);
+        }
 
         $stmt = $db->prepare("SELECT id FROM User WHERE email = ?");
         $stmt->execute([$email]);
@@ -134,8 +145,8 @@ class AuthController {
 
             $userId = generate_uuid();
             $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-            $stmt = $db->prepare("INSERT INTO User (id, clinicId, name, email, password, role) VALUES (?, ?, ?, ?, ?, 'owner')");
-            $stmt->execute([$userId, $clinicId, $name, $email, $hash]);
+            $stmt = $db->prepare("INSERT INTO User (id, clinicId, name, username, email, password, role) VALUES (?, ?, ?, ?, ?, ?, 'owner')");
+            $stmt->execute([$userId, $clinicId, $name, $username, $email, $hash]);
 
             $dbUser = ['id' => $userId, 'clinicId' => $clinicId, 'role' => 'owner', 'name' => $name];
             list($accessToken, $refreshToken) = $this->issueTokens($db, $dbUser);
@@ -148,6 +159,7 @@ class AuthController {
                 'user' => [
                     'id' => $userId,
                     'name' => $name,
+                    'username' => $username,
                     'email' => $email,
                     'role' => 'owner',
                     'ledgerMode' => 'actual',
@@ -162,26 +174,26 @@ class AuthController {
     }
 
     public function login($input, $user) {
-        $email = strtolower(trim($input['email'] ?? ''));
+        $identifier = strtolower(trim($input['username'] ?? $input['identifier'] ?? $input['email'] ?? ''));
         $password = $input['password'] ?? '';
 
-        if (empty($email) || empty($password)) {
+        if (empty($identifier) || empty($password)) {
             send_error('Invalid credentials', 401);
         }
 
         $db = DB::getConnection();
-        $this->assertNotRateLimited($db, $email);
+        $this->assertNotRateLimited($db, $identifier);
 
-        $stmt = $db->prepare("SELECT * FROM User WHERE email = ?");
-        $stmt->execute([$email]);
+        $stmt = $db->prepare("SELECT * FROM User WHERE username = ? OR email = ?");
+        $stmt->execute([$identifier, $identifier]);
         $dbUser = $stmt->fetch();
 
         if (!$dbUser || !$dbUser['isActive'] || !password_verify($password, $dbUser['password'])) {
-            $this->recordAttempt($db, $email, false);
+            $this->recordAttempt($db, $identifier, false);
             send_error('Invalid credentials', 401);
         }
 
-        $this->recordAttempt($db, $email, true);
+        $this->recordAttempt($db, $identifier, true);
 
         $stmt = $db->prepare("UPDATE User SET lastLogin = CURRENT_TIMESTAMP WHERE id = ?");
         $stmt->execute([$dbUser['id']]);
@@ -194,11 +206,29 @@ class AuthController {
             'user' => [
                 'id' => $dbUser['id'],
                 'name' => $dbUser['name'],
+                'username' => $dbUser['username'] ?? null,
                 'email' => $dbUser['email'],
                 'role' => $dbUser['role'],
                 'ledgerMode' => $dbUser['ledgerMode'],
                 'clinicId' => $dbUser['clinicId']
             ]
+        ]);
+    }
+
+    public function usernameAvailability($input, $user) {
+        $raw = $_GET['username'] ?? ($input['username'] ?? '');
+        $excludeUserId = trim((string)($_GET['excludeUserId'] ?? ($input['excludeUserId'] ?? ''))) ?: null;
+        try {
+            $username = pf_username_validate($raw);
+        } catch (InvalidArgumentException $e) {
+            send_json(['available' => false, 'valid' => false, 'message' => $e->getMessage()]);
+        }
+
+        $db = DB::getConnection();
+        send_json([
+            'username' => $username,
+            'valid' => true,
+            'available' => pf_username_available($db, $username, $excludeUserId),
         ]);
     }
 
@@ -308,14 +338,14 @@ class AuthController {
             send_error('This reset link is invalid or has expired. Please request a new one.', 400);
         }
 
-        $stmt = $db->prepare("SELECT id, email, clinicId FROM User WHERE id = ? AND isActive = 1");
+        $stmt = $db->prepare("SELECT id, username, email, clinicId FROM User WHERE id = ? AND isActive = 1");
         $stmt->execute([$reset['userId']]);
         $dbUser = $stmt->fetch();
         if (!$dbUser) {
             send_error('This reset link is invalid or has expired. Please request a new one.', 400);
         }
 
-        $this->validatePassword($password, $dbUser['email']);
+        $this->validatePassword($password, $dbUser['username'] ?: $dbUser['email']);
 
         $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
         $db->prepare("UPDATE User SET password = ? WHERE id = ?")->execute([$hash, $dbUser['id']]);
@@ -347,7 +377,7 @@ class AuthController {
 
     public function me($input, $user) {
         $db = DB::getConnection();
-        $stmt = $db->prepare("SELECT id, name, email, role, ledgerMode, clinicId, lastLogin, createdAt FROM User WHERE id = ?");
+        $stmt = $db->prepare("SELECT id, name, username, email, role, ledgerMode, clinicId, lastLogin, createdAt FROM User WHERE id = ?");
         $stmt->execute([$user['id']]);
         $dbUser = $stmt->fetch();
 

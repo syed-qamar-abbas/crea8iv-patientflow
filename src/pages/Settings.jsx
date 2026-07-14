@@ -11,7 +11,7 @@ import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import ColorPicker from '../components/ui/ColorPicker';
 import ClinicLogoMark from '../components/branding/ClinicLogoMark';
-import { fetchApi } from '../config/api';
+import { fetchApi, fetchPublicApi } from '../config/api';
 import { getLogoInitials, isImageLogo } from '../utils/branding';
 import { missingClinicFields, isFilled } from '../config/requiredSettings';
 
@@ -32,6 +32,53 @@ const ROLE_BADGE_VARIANT = {
   accountant: 'completed',
   receptionist: 'pending',
 };
+
+function suggestUsername(value) {
+  return String(value || '')
+    .toLowerCase()
+    .split('@')[0]
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/[._-]{2,}/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 24);
+}
+
+function useUsernameAvailability(username, excludeUserId = '') {
+  const [state, setState] = useState({ status: 'idle', message: '' });
+
+  useEffect(() => {
+    const value = String(username || '').trim().toLowerCase();
+    if (!value) {
+      setState({ status: 'idle', message: '' });
+      return undefined;
+    }
+    if (value.length < 3) {
+      setState({ status: 'invalid', message: 'Use at least 3 characters.' });
+      return undefined;
+    }
+
+    setState({ status: 'checking', message: 'Checking availability...' });
+    const timer = setTimeout(async () => {
+      try {
+        const qs = new URLSearchParams({ username: value });
+        if (excludeUserId) qs.set('excludeUserId', excludeUserId);
+        const res = await fetchPublicApi(`/auth/username-availability?${qs.toString()}`);
+        if (!res.valid) {
+          setState({ status: 'invalid', message: res.message || 'Invalid username.' });
+        } else if (res.available) {
+          setState({ status: 'available', message: 'Username is available.' });
+        } else {
+          setState({ status: 'taken', message: 'Username is already taken.' });
+        }
+      } catch (err) {
+        setState({ status: 'invalid', message: err.message || 'Could not check username.' });
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [username, excludeUserId]);
+
+  return state;
+}
 
 function getCurrentUser() {
   try {
@@ -60,12 +107,14 @@ function AccountManagement() {
   const [formError, setFormError] = useState('');
 
   // Add form
-  const [addForm, setAddForm] = useState({ name: '', email: '', password: '', role: 'receptionist' });
+  const [addForm, setAddForm] = useState({ name: '', username: '', email: '', password: '', role: 'receptionist' });
   // Edit form
-  const [editForm, setEditForm] = useState({ name: '', email: '', role: 'receptionist' });
+  const [editForm, setEditForm] = useState({ name: '', username: '', email: '', role: 'receptionist' });
   // Reset form
   const [resetForm, setResetForm] = useState({ newPassword: '', confirm: '' });
   const [showResetPass, setShowResetPass] = useState(false);
+  const addUsername = useUsernameAvailability(addForm.username);
+  const editUsername = useUsernameAvailability(editForm.username, editUser?.id || '');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,7 +132,7 @@ function AccountManagement() {
   useEffect(() => { load(); }, [load]);
 
   const openEdit = (u) => {
-    setEditForm({ name: u.name || '', email: u.email || '', role: u.role || 'receptionist' });
+    setEditForm({ name: u.name || '', username: u.username || suggestUsername(u.email || u.name), email: u.email || '', role: u.role || 'receptionist' });
     setFormError('');
     setEditUser(u);
   };
@@ -100,7 +149,7 @@ function AccountManagement() {
     try {
       await fetchApi('/users', { method: 'POST', body: JSON.stringify(addForm) });
       setAddOpen(false);
-      setAddForm({ name: '', email: '', password: '', role: 'receptionist' });
+      setAddForm({ name: '', username: '', email: '', password: '', role: 'receptionist' });
       await load();
     } catch (err) {
       setFormError(err.message || 'Failed to create user');
@@ -123,8 +172,8 @@ function AccountManagement() {
   const handleReset = async (e) => {
     e.preventDefault();
     if (!resetUser) return;
-    if (resetForm.newPassword.length < 6) {
-      setFormError('Password must be at least 6 characters');
+    if (resetForm.newPassword.length < 10) {
+      setFormError('Password must be at least 10 characters');
       return;
     }
     if (resetForm.newPassword !== resetForm.confirm) {
@@ -172,7 +221,7 @@ function AccountManagement() {
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={() => { setAddForm({ name: '', email: '', password: '', role: 'receptionist' }); setFormError(''); setAddOpen(true); }}>
+        <Button size="sm" onClick={() => { setAddForm({ name: '', username: '', email: '', password: '', role: 'receptionist' }); setFormError(''); setAddOpen(true); }}>
           <Plus className="w-4 h-4" /> Add User
         </Button>
       </div>
@@ -193,7 +242,7 @@ function AccountManagement() {
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
                 <th className="py-2 px-5 font-semibold">Name</th>
-                <th className="py-2 px-2 font-semibold">Email</th>
+                <th className="py-2 px-2 font-semibold">Username</th>
                 <th className="py-2 px-2 font-semibold">Role</th>
                 <th className="py-2 px-5 font-semibold text-right">Actions</th>
               </tr>
@@ -213,7 +262,10 @@ function AccountManagement() {
                         )}
                       </div>
                     </td>
-                    <td className="py-3 px-2 text-xs text-gray-500 dark:text-gray-400">{u.email}</td>
+                    <td className="py-3 px-2 text-xs text-gray-500 dark:text-gray-400">
+                      <span className="font-semibold text-gray-700 dark:text-gray-200">{u.username || 'Not set'}</span>
+                      {u.email && <span className="block text-[11px] text-gray-400">{u.email}</span>}
+                    </td>
                     <td className="py-3 px-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <Badge label={u.role} variant={ROLE_BADGE_VARIANT[u.role] || 'inactive'} />
@@ -259,16 +311,23 @@ function AccountManagement() {
         <form onSubmit={handleAdd} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Full Name</label>
-            <input required value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            <input required value={addForm.name} onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value, username: f.username || suggestUsername(e.target.value) }))} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Email</label>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Username</label>
+            <input required value={addForm.username} onChange={(e) => setAddForm({ ...addForm, username: e.target.value.toLowerCase() })} autoComplete="username" className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            {addUsername.message && (
+              <p className={`mt-1 text-[11px] font-semibold ${addUsername.status === 'available' ? 'text-emerald-600' : addUsername.status === 'checking' ? 'text-gray-400' : 'text-rose-600'}`}>{addUsername.message}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Contact Email</label>
             <input type="email" required value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Password</label>
             <div className="relative">
-              <input type={showResetPass ? 'text' : 'password'} required minLength={6} value={addForm.password} onChange={(e) => setAddForm({ ...addForm, password: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+              <input type={showResetPass ? 'text' : 'password'} required minLength={10} value={addForm.password} onChange={(e) => setAddForm({ ...addForm, password: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
               <button type="button" onClick={() => setShowResetPass((v) => !v)} title={showResetPass ? 'Hide password' : 'Show password'} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                 {showResetPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -285,7 +344,7 @@ function AccountManagement() {
           )}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setAddOpen(false)} disabled={busy}>Cancel</Button>
-            <Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create User'}</Button>
+            <Button type="submit" disabled={busy || addUsername.status !== 'available'}>{busy ? 'Creating…' : 'Create User'}</Button>
           </div>
         </form>
       </Modal>
@@ -298,7 +357,14 @@ function AccountManagement() {
             <input required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Email</label>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Username</label>
+            <input required value={editForm.username} onChange={(e) => setEditForm({ ...editForm, username: e.target.value.toLowerCase() })} autoComplete="username" className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            {editUsername.message && (
+              <p className={`mt-1 text-[11px] font-semibold ${editUsername.status === 'available' ? 'text-emerald-600' : editUsername.status === 'checking' ? 'text-gray-400' : 'text-rose-600'}`}>{editUsername.message}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Contact Email</label>
             <input type="email" required value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
           </div>
           <div>
@@ -312,7 +378,7 @@ function AccountManagement() {
           )}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setEditUser(null)} disabled={busy}>Cancel</Button>
-            <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save Changes'}</Button>
+            <Button type="submit" disabled={busy || editUsername.status !== 'available'}>{busy ? 'Saving…' : 'Save Changes'}</Button>
           </div>
         </form>
       </Modal>
@@ -323,7 +389,7 @@ function AccountManagement() {
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">New Password</label>
             <div className="relative">
-              <input type={showResetPass ? 'text' : 'password'} required minLength={6} value={resetForm.newPassword} onChange={(e) => setResetForm({ ...resetForm, newPassword: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+              <input type={showResetPass ? 'text' : 'password'} required minLength={10} value={resetForm.newPassword} onChange={(e) => setResetForm({ ...resetForm, newPassword: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
               <button type="button" onClick={() => setShowResetPass((v) => !v)} title={showResetPass ? 'Hide password' : 'Show password'} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                 {showResetPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -331,7 +397,7 @@ function AccountManagement() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Confirm Password</label>
-            <input type={showResetPass ? 'text' : 'password'} required minLength={6} value={resetForm.confirm} onChange={(e) => setResetForm({ ...resetForm, confirm: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            <input type={showResetPass ? 'text' : 'password'} required minLength={10} value={resetForm.confirm} onChange={(e) => setResetForm({ ...resetForm, confirm: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
           </div>
           {formError && (
             <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg px-3 py-2">{formError}</div>
@@ -347,8 +413,8 @@ function AccountManagement() {
       <Modal isOpen={!!deleteUser} onClose={() => !busy && setDeleteUser(null)} title="Delete User" size="sm">
         <div className="space-y-4">
           <p className="text-sm text-gray-700 dark:text-gray-300">
-            Are you sure you want to delete <span className="font-semibold">{deleteUser?.name}</span> ({deleteUser?.email})?
-            This action cannot be undone.
+            Are you sure you want to deactivate <span className="font-semibold">{deleteUser?.name}</span> ({deleteUser?.username || deleteUser?.email})?
+            The account will be disabled and its active sessions will be revoked.
           </p>
           {formError && (
             <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg px-3 py-2">{formError}</div>
@@ -356,7 +422,7 @@ function AccountManagement() {
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setDeleteUser(null)} disabled={busy}>Cancel</Button>
             <Button type="button" variant="danger" onClick={handleDelete} disabled={busy}>
-              {busy ? 'Deleting…' : 'Delete User'}
+              {busy ? 'Deactivating…' : 'Deactivate User'}
             </Button>
           </div>
         </div>
@@ -962,7 +1028,7 @@ export default function Settings() {
             { role: 'Owner', access: 'Full access — all modules, settings, and financials', color: 'bg-indigo-50 text-indigo-700' },
             { role: 'Manager', access: `${staffLabel}, ${appointmentsLabel}, clients, and reports`, color: 'bg-blue-50 text-blue-700' },
             { role: `${doctorLabel} / Specialist`, access: `Own ${appointmentsLabel} and client records`, color: 'bg-purple-50 text-purple-700' },
-            { role: 'Receptionist', access: `${appointmentsLabel} and client intake only`, color: 'bg-gray-100 text-gray-600' },
+            { role: 'Receptionist', access: `${appointmentsLabel}, client intake, and invoice billing — no financial analytics`, color: 'bg-gray-100 text-gray-600' },
             { role: 'Accountant', access: 'Financial module and reports only', color: 'bg-emerald-50 text-emerald-700' },
           ].map(r => (
             <div key={r.role} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">

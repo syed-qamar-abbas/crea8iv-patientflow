@@ -1,38 +1,53 @@
 <?php
 
 const INDUSTRY_TEMPLATE_DEFAULT = 'healthcare';
+const INDUSTRY_TEMPLATE_SCHEMA_VERSION = 2;
 
-function industry_template_builtins() {
-    $base = [
+function industry_template_v2_base() {
+    return [
+        'schemaVersion' => INDUSTRY_TEMPLATE_SCHEMA_VERSION,
+        'vertical' => 'healthcare',
+        'primaryGoal' => ['key' => 'book_appointment', 'label' => 'Book Appointment', 'eventType' => 'appointment'],
         'terms' => [
-            'appointment' => 'Appointment',
-            'appointments' => 'Appointments',
-            'patient' => 'Patient',
-            'patients' => 'Patients',
-            'client' => 'Patient',
-            'clients' => 'Patients',
-            'doctor' => 'Doctor',
-            'doctors' => 'Doctors',
-            'staff' => 'Staff',
-            'service' => 'Treatment Service',
-            'services' => 'Treatment Services',
-            'treatment' => 'Treatment',
-            'treatments' => 'Treatments',
-            'clinical' => 'Clinical',
-            'clinicalWorkspace' => 'Clinical Workspace',
-            'clinicalNotes' => 'Clinical Notes',
-            'recall' => 'Recall',
-            'recalls' => 'Recalls',
-            'visit' => 'Visit',
-            'visits' => 'Visits',
-            'campaign' => 'Campaign',
-            'campaigns' => 'Campaigns',
-            'reception' => 'Reception Desk',
-            'packages' => 'Packages',
-            'gallery' => 'Gallery',
-            'feedback' => 'Feedback',
-            'lab' => 'Lab',
+            'business' => 'Clinic', 'clinic' => 'Clinic', 'appointment' => 'Appointment', 'appointments' => 'Appointments',
+            'patient' => 'Patient', 'patients' => 'Patients', 'client' => 'Patient', 'clients' => 'Patients',
+            'doctor' => 'Doctor', 'doctors' => 'Doctors', 'staff' => 'Staff', 'service' => 'Treatment Service',
+            'services' => 'Treatment Services', 'treatment' => 'Treatment', 'treatments' => 'Treatments',
+            'clinical' => 'Operations', 'clinicalWorkspace' => 'Operations Workspace', 'clinicalNotes' => 'Operational Notes',
+            'recall' => 'Recall', 'recalls' => 'Recalls', 'visit' => 'Visit', 'visits' => 'Visits',
+            'campaign' => 'Campaign', 'campaigns' => 'Campaigns', 'reception' => 'Reception Desk',
+            'packages' => 'Packages', 'gallery' => 'Private Media', 'feedback' => 'Feedback', 'lab' => 'Lab',
+            'lead' => 'Lead', 'leads' => 'Leads', 'project' => 'Case', 'projects' => 'Cases',
         ],
+        'capabilities' => [
+            'appointments' => true, 'meetings' => false, 'pipeline' => false, 'projects' => false, 'properties' => false,
+            'lab' => true, 'stockInventory' => true, 'privateMedia' => true, 'packages' => true, 'invoicing' => true,
+            'dentalContext' => false, 'aestheticContext' => false, 'specialtySwitcher' => false,
+            // These remain fail-closed under operations-v1 regardless of template selection.
+            'clinicalRecordEntry' => false, 'procedureEntry' => false, 'medicalHistoryEntry' => false, 'publicPatientMedia' => false,
+        ],
+        'navigation' => ['groups' => [
+            ['key' => 'main', 'label' => 'Main Menu', 'modules' => ['dashboard', 'reception', 'appointments', 'clients', 'clinical', 'staff', 'services', 'financials']],
+            ['key' => 'billing', 'label' => 'Billing & Packages', 'modules' => ['packages', 'invoices']],
+            ['key' => 'operations', 'label' => 'Operations', 'modules' => ['lab', 'inventory', 'gallery', 'feedback']],
+            ['key' => 'growth', 'label' => 'Growth', 'modules' => ['marketing', 'whatsapp', 'ai', 'aiReceptionist', 'metaLeads', 'imports', 'reports', 'branches']],
+            ['key' => 'admin', 'label' => 'Admin', 'modules' => ['audit', 'support', 'settings']],
+        ]],
+        'scheduling' => [
+            'defaultEventType' => 'appointment',
+            'eventTypes' => [
+                ['key' => 'appointment', 'label' => 'Appointment'],
+                ['key' => 'consultation', 'label' => 'Consultation'],
+                ['key' => 'follow_up', 'label' => 'Follow-up'],
+            ],
+        ],
+        'profile' => ['fields' => [
+            ['key' => 'name', 'label' => 'Full Name', 'type' => 'text', 'required' => true],
+            ['key' => 'phone', 'label' => 'Phone', 'type' => 'phone', 'required' => true],
+            ['key' => 'email', 'label' => 'Email', 'type' => 'email'],
+            ['key' => 'notes', 'label' => 'Operational Notes', 'type' => 'textarea'],
+        ]],
+        'workflow' => ['key' => 'appointment_flow', 'stages' => ['new', 'confirmed', 'checked_in', 'completed', 'cancelled']],
         'dashboard' => [
             'todayAppointments' => "Today's Appointments",
             'activePatients' => 'Active Patients',
@@ -41,20 +56,154 @@ function industry_template_builtins() {
             'topStaff' => 'Top Doctors',
             'servicesConfigured' => 'Services configured',
             'portalFeatures' => 'Portal Features',
+            'primaryAction' => 'Book Appointment',
         ],
         'modules' => [
-            'reception' => ['label' => 'Reception Desk', 'desc' => 'Today appointments, invoices, check-in and handover', 'icon' => 'WalletCards'],
-            'appointments' => ['label' => 'Appointments', 'desc' => 'Calendar, doctor availability and booking', 'icon' => 'Calendar'],
-            'clients' => ['label' => 'Patients', 'desc' => 'Patient records, history, dues and follow-ups', 'icon' => 'Users'],
-            'clinical' => ['label' => 'Clinical', 'desc' => 'Treatment notes and patient clinical workflow', 'icon' => 'Stethoscope'],
-            'staff' => ['label' => 'Staff', 'desc' => 'Doctor profiles, salaries, commissions and access', 'icon' => 'UserCheck'],
-            'services' => ['label' => 'Services', 'desc' => 'Treatment categories, durations and pricing', 'icon' => 'Stethoscope'],
+            'reception' => ['label' => 'Reception Desk', 'desc' => 'Today schedule, invoices, check-in and handover', 'icon' => 'WalletCards', 'visible' => true],
+            'appointments' => ['label' => 'Appointments', 'desc' => 'Calendar, availability and booking', 'icon' => 'Calendar', 'visible' => true],
+            'clients' => ['label' => 'Patients', 'desc' => 'Operational profiles, history, dues and follow-ups', 'icon' => 'Users', 'visible' => true],
+            'clinical' => ['label' => 'Operations', 'desc' => 'Operational workload and service workflow', 'icon' => 'Stethoscope', 'visible' => true],
+            'staff' => ['label' => 'Staff', 'desc' => 'Team profiles, compensation and access', 'icon' => 'UserCheck', 'visible' => true],
+            'services' => ['label' => 'Services', 'desc' => 'Service categories, durations and pricing', 'icon' => 'Stethoscope', 'visible' => true],
+            'financials' => ['label' => 'Financials', 'desc' => 'Revenue, dues and payment summaries', 'icon' => 'DollarSign', 'visible' => true],
+            'packages' => ['label' => 'Packages', 'desc' => 'Plans and bundled services', 'icon' => 'Package', 'visible' => true],
+            'invoices' => ['label' => 'Invoices', 'desc' => 'Billing, payments, refunds and PDFs', 'icon' => 'Receipt', 'visible' => true],
+            'lab' => ['label' => 'Lab', 'desc' => 'External lab work and due dates', 'icon' => 'FlaskConical', 'visible' => true],
+            'inventory' => ['label' => 'Inventory', 'desc' => 'Stock tracking and supply movement', 'icon' => 'Archive', 'visible' => true],
+            'gallery' => ['label' => 'Private Media', 'desc' => 'Private operational documents and media', 'icon' => 'Image', 'visible' => true],
+            'feedback' => ['label' => 'Feedback', 'desc' => 'Customer feedback and team performance', 'icon' => 'MessageSquare', 'visible' => true],
+            'marketing' => ['label' => 'Marketing', 'desc' => 'Engagement and campaigns', 'icon' => 'Megaphone', 'visible' => true],
+            'whatsapp' => ['label' => 'WhatsApp Center', 'desc' => 'Conversations, reminders and campaigns', 'icon' => 'MessageCircle', 'visible' => true],
+            'ai' => ['label' => 'AI Hub', 'desc' => 'AI provider configuration and failover', 'icon' => 'Bot', 'visible' => true],
+            'aiReceptionist' => ['label' => 'AI Receptionist', 'desc' => 'AI front desk and intake workflows', 'icon' => 'Sparkles', 'visible' => true],
+            'metaLeads' => ['label' => 'Meta Leads', 'desc' => 'Facebook and Instagram leads to CRM workflow', 'icon' => 'Facebook', 'visible' => true],
+            'imports' => ['label' => 'Import Center', 'desc' => 'CSV, Excel, Sheets and CRM migration jobs', 'icon' => 'Database', 'visible' => true],
+            'reports' => ['label' => 'Reports', 'desc' => 'Live operational and financial reports', 'icon' => 'FileBarChart', 'visible' => true],
+            'branches' => ['label' => 'Branches', 'desc' => 'Location management and message routing', 'icon' => 'Building2', 'visible' => true],
+            'audit' => ['label' => 'Audit Trail', 'desc' => 'Track portal activity and changes', 'icon' => 'Shield', 'visible' => true],
+            'support' => ['label' => 'Support', 'desc' => 'Support tickets and platform help', 'icon' => 'LifeBuoy', 'visible' => true],
+            'settings' => ['label' => 'Settings', 'desc' => 'Business profile, public site and branding', 'icon' => 'Settings', 'visible' => true],
         ],
     ];
+}
 
-    $templates = [
-        'healthcare' => ['name' => 'Healthcare', 'config' => $base],
-        'marketing_agency' => ['name' => 'Marketing Agency', 'config' => array_replace_recursive($base, [
+function industry_template_make($name, $override = []) {
+    return ['name' => $name, 'config' => array_replace_recursive(industry_template_v2_base(), $override)];
+}
+
+function industry_template_builtins() {
+    return [
+        // Existing tenants retain their current behavior until explicitly moved.
+        'healthcare' => industry_template_make('Healthcare (Legacy)'),
+        'dental_clinic' => industry_template_make('Dental Clinic', [
+            'vertical' => 'dental',
+            'terms' => ['business' => 'Dental Clinic', 'doctor' => 'Dentist', 'doctors' => 'Dentists', 'service' => 'Dental Service', 'services' => 'Dental Services'],
+            'capabilities' => ['dentalContext' => true],
+            'profile' => ['fields' => [
+                ['key' => 'name', 'label' => 'Patient Name', 'type' => 'text', 'required' => true],
+                ['key' => 'phone', 'label' => 'Phone', 'type' => 'phone', 'required' => true],
+                ['key' => 'email', 'label' => 'Email', 'type' => 'email'],
+                ['key' => 'appointmentConcern', 'label' => 'Appointment Concern', 'type' => 'textarea'],
+                ['key' => 'notes', 'label' => 'Operational Notes', 'type' => 'textarea'],
+            ]],
+            'modules' => ['clinical' => ['label' => 'Dental Operations'], 'inventory' => ['label' => 'Dental Inventory']],
+            'dashboard' => ['topStaff' => 'Top Dentists', 'primaryAction' => 'Book Dental Appointment'],
+        ]),
+        'aesthetic_clinic' => industry_template_make('Aesthetic Clinic', [
+            'vertical' => 'aesthetics',
+            'terms' => ['business' => 'Aesthetic Clinic', 'doctor' => 'Practitioner', 'doctors' => 'Practitioners', 'service' => 'Aesthetic Service', 'services' => 'Aesthetic Services', 'recall' => 'Next Session', 'recalls' => 'Next Sessions'],
+            'capabilities' => ['aestheticContext' => true, 'lab' => false],
+            'scheduling' => ['eventTypes' => [
+                ['key' => 'consultation', 'label' => 'Consultation'],
+                ['key' => 'treatment_session', 'label' => 'Treatment Session'],
+                ['key' => 'follow_up', 'label' => 'Follow-up'],
+            ]],
+            'profile' => ['fields' => [
+                ['key' => 'name', 'label' => 'Client Name', 'type' => 'text', 'required' => true],
+                ['key' => 'phone', 'label' => 'Phone', 'type' => 'phone', 'required' => true],
+                ['key' => 'email', 'label' => 'Email', 'type' => 'email'],
+                ['key' => 'concern', 'label' => 'Aesthetic Concern', 'type' => 'textarea'],
+                ['key' => 'treatmentArea', 'label' => 'Treatment Area', 'type' => 'text'],
+                ['key' => 'notes', 'label' => 'Operational Notes', 'type' => 'textarea'],
+            ]],
+            'modules' => ['clinical' => ['label' => 'Aesthetic Operations'], 'lab' => ['visible' => false], 'inventory' => ['label' => 'Product Inventory']],
+            'dashboard' => ['todayAppointments' => "Today's Consultations & Sessions", 'topStaff' => 'Top Practitioners', 'primaryAction' => 'Book Consultation'],
+        ]),
+        'dental_aesthetic_clinic' => industry_template_make('Dental & Aesthetic Clinic', [
+            'vertical' => 'dental_aesthetics',
+            'terms' => ['business' => 'Dental & Aesthetic Clinic', 'doctor' => 'Practitioner', 'doctors' => 'Practitioners'],
+            'capabilities' => ['dentalContext' => true, 'aestheticContext' => true, 'specialtySwitcher' => true],
+            'scheduling' => ['eventTypes' => [
+                ['key' => 'dental_appointment', 'label' => 'Dental Appointment'],
+                ['key' => 'aesthetic_consultation', 'label' => 'Aesthetic Consultation'],
+                ['key' => 'treatment_session', 'label' => 'Treatment Session'],
+                ['key' => 'follow_up', 'label' => 'Follow-up'],
+            ]],
+            'profile' => ['fields' => [
+                ['key' => 'name', 'label' => 'Patient Name', 'type' => 'text', 'required' => true],
+                ['key' => 'phone', 'label' => 'Phone', 'type' => 'phone', 'required' => true],
+                ['key' => 'email', 'label' => 'Email', 'type' => 'email'],
+                ['key' => 'specialty', 'label' => 'Service Area', 'type' => 'select', 'options' => ['dental', 'aesthetics', 'both']],
+                ['key' => 'appointmentConcern', 'label' => 'Appointment Concern', 'type' => 'textarea'],
+                ['key' => 'notes', 'label' => 'Operational Notes', 'type' => 'textarea'],
+            ]],
+            'modules' => ['clinical' => ['label' => 'Treatment Operations']],
+            'dashboard' => ['topStaff' => 'Top Practitioners', 'primaryAction' => 'Book Appointment'],
+        ]),
+        'interiors_architects' => industry_template_make('Interiors & Architects', [
+            'vertical' => 'professional_services',
+            'primaryGoal' => ['key' => 'schedule_consultation', 'label' => 'Schedule Consultation', 'eventType' => 'consultation'],
+            'terms' => [
+                'business' => 'Design Studio', 'clinic' => 'Studio', 'appointment' => 'Consultation', 'appointments' => 'Consultations',
+                'patient' => 'Client', 'patients' => 'Clients', 'client' => 'Client', 'clients' => 'Clients',
+                'doctor' => 'Architect / Designer', 'doctors' => 'Architects & Designers', 'service' => 'Project Type', 'services' => 'Project Types',
+                'treatment' => 'Project', 'treatments' => 'Projects', 'clinical' => 'Projects', 'clinicalWorkspace' => 'Project Workspace',
+                'clinicalNotes' => 'Project Notes', 'recall' => 'Proposal Follow-up', 'recalls' => 'Proposal Follow-ups',
+                'visit' => 'Site Visit', 'visits' => 'Site Visits', 'project' => 'Project', 'projects' => 'Projects',
+            ],
+            'capabilities' => ['meetings' => true, 'pipeline' => true, 'projects' => true, 'lab' => false, 'stockInventory' => false, 'packages' => false],
+            'scheduling' => ['defaultEventType' => 'consultation', 'eventTypes' => [
+                ['key' => 'consultation', 'label' => 'Consultation'], ['key' => 'site_visit', 'label' => 'Site Visit'], ['key' => 'design_review', 'label' => 'Design Review'],
+            ]],
+            'workflow' => ['key' => 'design_project_pipeline', 'stages' => ['inquiry', 'qualified', 'consultation', 'site_visit', 'proposal', 'won', 'in_progress', 'delivered', 'lost']],
+            'profile' => ['fields' => [
+                ['key' => 'name', 'label' => 'Client Name', 'type' => 'text', 'required' => true], ['key' => 'phone', 'label' => 'Phone', 'type' => 'phone', 'required' => true],
+                ['key' => 'email', 'label' => 'Email', 'type' => 'email'], ['key' => 'propertyType', 'label' => 'Property Type', 'type' => 'text'],
+                ['key' => 'location', 'label' => 'Project Location', 'type' => 'text'], ['key' => 'coveredArea', 'label' => 'Covered Area', 'type' => 'text'],
+                ['key' => 'budgetRange', 'label' => 'Estimated Budget', 'type' => 'money_range'], ['key' => 'preferredStyle', 'label' => 'Preferred Style', 'type' => 'text'],
+                ['key' => 'targetDate', 'label' => 'Target Date', 'type' => 'date'], ['key' => 'notes', 'label' => 'Project Notes', 'type' => 'textarea'],
+            ]],
+            'modules' => ['reception' => ['label' => 'Meeting Desk'], 'appointments' => ['label' => 'Consultations'], 'clients' => ['label' => 'Clients'], 'clinical' => ['label' => 'Project Pipeline', 'icon' => 'ClipboardList'], 'staff' => ['label' => 'Architects & Designers'], 'services' => ['label' => 'Project Types'], 'lab' => ['visible' => false], 'inventory' => ['visible' => false], 'packages' => ['visible' => false], 'gallery' => ['label' => 'Project Media']],
+            'dashboard' => ['todayAppointments' => 'Consultations Today', 'activePatients' => 'Active Clients', 'activeStaff' => 'Active Designers', 'scheduleTitle' => "Today's Consultations", 'topStaff' => 'Top Designers', 'servicesConfigured' => 'Project types configured', 'primaryAction' => 'Schedule Consultation'],
+        ]),
+        'real_estate' => industry_template_make('Real Estate', [
+            'vertical' => 'real_estate',
+            'primaryGoal' => ['key' => 'schedule_meeting', 'label' => 'Schedule Meeting', 'eventType' => 'meeting'],
+            'terms' => [
+                'business' => 'Real Estate Business', 'clinic' => 'Agency', 'appointment' => 'Meeting', 'appointments' => 'Meetings',
+                'patient' => 'Lead', 'patients' => 'Leads', 'client' => 'Lead', 'clients' => 'Leads', 'doctor' => 'Agent', 'doctors' => 'Agents',
+                'service' => 'Property', 'services' => 'Properties', 'treatment' => 'Property', 'treatments' => 'Properties',
+                'clinical' => 'Deals', 'clinicalWorkspace' => 'Deal Pipeline', 'clinicalNotes' => 'Lead Notes',
+                'recall' => 'Lead Follow-up', 'recalls' => 'Lead Follow-ups', 'visit' => 'Property Viewing', 'visits' => 'Property Viewings',
+            ],
+            'capabilities' => ['meetings' => true, 'pipeline' => true, 'properties' => true, 'lab' => false, 'stockInventory' => false, 'packages' => false],
+            'scheduling' => ['defaultEventType' => 'meeting', 'eventTypes' => [
+                ['key' => 'meeting', 'label' => 'Office Meeting'], ['key' => 'property_viewing', 'label' => 'Property Viewing'], ['key' => 'call', 'label' => 'Phone / Video Call'],
+            ]],
+            'workflow' => ['key' => 'real_estate_pipeline', 'stages' => ['new', 'contacted', 'qualified', 'meeting', 'viewing', 'negotiation', 'won', 'lost']],
+            'profile' => ['fields' => [
+                ['key' => 'name', 'label' => 'Lead Name', 'type' => 'text', 'required' => true], ['key' => 'phone', 'label' => 'Phone', 'type' => 'phone', 'required' => true],
+                ['key' => 'email', 'label' => 'Email', 'type' => 'email'], ['key' => 'intent', 'label' => 'Looking To', 'type' => 'select', 'options' => ['buy', 'rent', 'sell', 'invest']],
+                ['key' => 'propertyType', 'label' => 'Property Type', 'type' => 'text'], ['key' => 'preferredLocation', 'label' => 'Preferred Location', 'type' => 'text'],
+                ['key' => 'budgetRange', 'label' => 'Budget Range', 'type' => 'money_range'], ['key' => 'bedrooms', 'label' => 'Bedrooms', 'type' => 'number'],
+                ['key' => 'leadSource', 'label' => 'Lead Source', 'type' => 'text'], ['key' => 'notes', 'label' => 'Lead Notes', 'type' => 'textarea'],
+            ]],
+            'modules' => ['reception' => ['label' => 'Lead Desk'], 'appointments' => ['label' => 'Meetings & Viewings'], 'clients' => ['label' => 'Leads'], 'clinical' => ['label' => 'Deal Pipeline', 'icon' => 'ClipboardList'], 'staff' => ['label' => 'Agents'], 'services' => ['label' => 'Properties'], 'lab' => ['visible' => false], 'inventory' => ['label' => 'Property Listings', 'desc' => 'Available, reserved and sold property listings'], 'packages' => ['visible' => false], 'gallery' => ['label' => 'Property Media']],
+            'dashboard' => ['todayAppointments' => 'Meetings & Viewings Today', 'activePatients' => 'Active Leads', 'activeStaff' => 'Active Agents', 'scheduleTitle' => "Today's Meetings", 'topStaff' => 'Top Agents', 'servicesConfigured' => 'Properties listed', 'primaryAction' => 'Schedule Meeting'],
+        ]),
+        'marketing_agency' => industry_template_make('Marketing Agency', [
+            'vertical' => 'professional_services',
+            'primaryGoal' => ['key' => 'schedule_discovery', 'label' => 'Schedule Discovery Meeting', 'eventType' => 'discovery_meeting'],
             'terms' => [
                 'appointment' => 'Meeting', 'appointments' => 'Meetings',
                 'patient' => 'Client', 'patients' => 'Clients', 'client' => 'Client', 'clients' => 'Clients',
@@ -63,7 +212,20 @@ function industry_template_builtins() {
                 'treatment' => 'Project', 'treatments' => 'Projects',
                 'clinical' => 'Projects', 'clinicalWorkspace' => 'Project Workspace', 'clinicalNotes' => 'Task Notes',
                 'recall' => 'Follow-up', 'recalls' => 'Follow-ups', 'visit' => 'Meeting', 'visits' => 'Meetings',
+                'business' => 'Marketing Agency', 'clinic' => 'Agency', 'project' => 'Project', 'projects' => 'Projects',
             ],
+            'capabilities' => ['meetings' => true, 'pipeline' => true, 'projects' => true, 'lab' => false, 'stockInventory' => false],
+            'scheduling' => ['defaultEventType' => 'discovery_meeting', 'eventTypes' => [
+                ['key' => 'discovery_meeting', 'label' => 'Discovery Meeting'], ['key' => 'strategy_call', 'label' => 'Strategy Call'], ['key' => 'review_meeting', 'label' => 'Performance Review'],
+            ]],
+            'workflow' => ['key' => 'agency_sales_pipeline', 'stages' => ['lead', 'discovery', 'proposal', 'negotiation', 'onboarding', 'active', 'renewal', 'closed']],
+            'profile' => ['fields' => [
+                ['key' => 'name', 'label' => 'Client / Company Name', 'type' => 'text', 'required' => true], ['key' => 'phone', 'label' => 'Phone', 'type' => 'phone', 'required' => true],
+                ['key' => 'email', 'label' => 'Email', 'type' => 'email'], ['key' => 'industry', 'label' => 'Industry', 'type' => 'text'],
+                ['key' => 'monthlyBudget', 'label' => 'Monthly Marketing Budget', 'type' => 'money'],
+                ['key' => 'requestedChannels', 'label' => 'Requested Channels', 'type' => 'multi_select', 'options' => ['Meta Ads', 'Google Ads', 'SEO', 'Social Media', 'Web Development', 'Creative']],
+                ['key' => 'targetKpis', 'label' => 'Target KPIs', 'type' => 'textarea'], ['key' => 'notes', 'label' => 'Account Notes', 'type' => 'textarea'],
+            ]],
             'dashboard' => [
                 'todayAppointments' => 'Meetings Scheduled',
                 'activePatients' => 'Active Clients',
@@ -71,145 +233,21 @@ function industry_template_builtins() {
                 'scheduleTitle' => "Today's Meetings",
                 'topStaff' => 'Top Account Managers',
                 'servicesConfigured' => 'Services configured',
+                'primaryAction' => 'Schedule Discovery Meeting',
             ],
             'modules' => [
-                'reception' => ['label' => 'Front Desk', 'desc' => 'Meetings, invoices, check-in and handover'],
+                'reception' => ['label' => 'Meeting Desk', 'desc' => 'Meetings, invoices and handover'],
                 'appointments' => ['label' => 'Meetings', 'desc' => 'Calendar, account manager availability and booking'],
                 'clients' => ['label' => 'Clients', 'desc' => 'Client records, history, dues and follow-ups'],
-                'clinical' => ['label' => 'Projects', 'desc' => 'Project notes and client workflow'],
-                'staff' => ['label' => 'Team', 'desc' => 'Account managers, salaries, commissions and access'],
+                'clinical' => ['label' => 'Client Pipeline', 'desc' => 'Project notes and client workflow', 'icon' => 'ClipboardList'],
+                'staff' => ['label' => 'Agency Team', 'desc' => 'Account managers, salaries, commissions and access'],
                 'services' => ['label' => 'Services', 'desc' => 'Service categories, durations and pricing'],
+                'lab' => ['visible' => false], 'inventory' => ['visible' => false],
+                'gallery' => ['label' => 'Creative Library'], 'packages' => ['label' => 'Retainers & Packages'],
+                'marketing' => ['label' => 'Client Campaigns'],
             ],
-        ])],
-        'real_estate' => ['name' => 'Real Estate', 'config' => array_replace_recursive($base, [
-            'terms' => [
-                'appointment' => 'Property Visit', 'appointments' => 'Property Visits',
-                'patient' => 'Lead', 'patients' => 'Leads', 'client' => 'Lead', 'clients' => 'Leads',
-                'doctor' => 'Agent', 'doctors' => 'Agents',
-                'service' => 'Property', 'services' => 'Properties',
-                'treatment' => 'Property', 'treatments' => 'Properties',
-                'clinical' => 'Properties', 'clinicalWorkspace' => 'Property Workspace', 'clinicalNotes' => 'Visit Notes',
-                'recall' => 'Lead Nurturing', 'recalls' => 'Lead Nurturing', 'visit' => 'Property Visit', 'visits' => 'Property Visits',
-            ],
-            'dashboard' => [
-                'todayAppointments' => 'Property Visits',
-                'activePatients' => 'New Leads',
-                'activeStaff' => 'Active Agents',
-                'scheduleTitle' => "Today's Visits",
-                'topStaff' => 'Top Agents',
-                'servicesConfigured' => 'Properties listed',
-            ],
-            'modules' => [
-                'appointments' => ['label' => 'Property Visits', 'desc' => 'Calendar, agent availability and viewings'],
-                'clients' => ['label' => 'Leads', 'desc' => 'Lead records, history, dues and nurturing'],
-                'clinical' => ['label' => 'Properties', 'desc' => 'Property notes and lead workflow'],
-                'staff' => ['label' => 'Agents', 'desc' => 'Agent profiles, commissions and access'],
-                'services' => ['label' => 'Properties', 'desc' => 'Property categories, viewing duration and pricing'],
-            ],
-        ])],
-        'beauty_salon' => ['name' => 'Beauty Salon', 'config' => array_replace_recursive($base, [
-            'terms' => [
-                'appointment' => 'Booking', 'appointments' => 'Bookings',
-                'patient' => 'Client', 'patients' => 'Clients', 'client' => 'Client', 'clients' => 'Clients',
-                'doctor' => 'Stylist', 'doctors' => 'Stylists',
-                'service' => 'Service', 'services' => 'Services',
-                'treatment' => 'Treatment', 'treatments' => 'Treatments',
-                'clinical' => 'Client Notes', 'clinicalWorkspace' => 'Client Notes', 'clinicalNotes' => 'Service Notes',
-                'recall' => 'Follow-up', 'recalls' => 'Follow-ups', 'visit' => 'Appointment', 'visits' => 'Appointments',
-            ],
-            'dashboard' => [
-                'todayAppointments' => "Today's Bookings",
-                'activePatients' => 'Active Clients',
-                'activeStaff' => 'Active Stylists',
-                'scheduleTitle' => "Today's Bookings",
-                'topStaff' => 'Top Stylists',
-            ],
-            'modules' => [
-                'appointments' => ['label' => 'Bookings', 'desc' => 'Calendar, stylist availability and booking'],
-                'clients' => ['label' => 'Clients', 'desc' => 'Client records, history, dues and follow-ups'],
-                'clinical' => ['label' => 'Client Notes', 'desc' => 'Service notes and client preferences'],
-                'staff' => ['label' => 'Stylists', 'desc' => 'Stylist profiles, salaries, commissions and access'],
-                'services' => ['label' => 'Services', 'desc' => 'Service categories, durations and pricing'],
-            ],
-        ])],
-        'interior_design_studio' => ['name' => 'Interior Design Studio', 'config' => array_replace_recursive($base, [
-            'terms' => [
-                'appointment' => 'Consultation', 'appointments' => 'Consultations',
-                'patient' => 'Client', 'patients' => 'Clients', 'client' => 'Client', 'clients' => 'Clients',
-                'doctor' => 'Designer', 'doctors' => 'Designers',
-                'service' => 'Project', 'services' => 'Projects',
-                'treatment' => 'Project', 'treatments' => 'Projects',
-                'clinical' => 'Design', 'clinicalWorkspace' => 'Design Workspace', 'clinicalNotes' => 'Design Notes',
-                'recall' => 'Proposal Follow-up', 'recalls' => 'Proposal Follow-ups', 'visit' => 'Consultation', 'visits' => 'Consultations',
-            ],
-            'dashboard' => [
-                'todayAppointments' => 'Consultations Today',
-                'activePatients' => 'Active Clients',
-                'activeStaff' => 'Active Designers',
-                'scheduleTitle' => "Today's Consultations",
-                'topStaff' => 'Top Designers',
-                'servicesConfigured' => 'Projects configured',
-            ],
-            'modules' => [
-                'appointments' => ['label' => 'Consultations', 'desc' => 'Calendar, designer availability and booking'],
-                'clients' => ['label' => 'Clients', 'desc' => 'Client records, history, dues and proposal follow-ups'],
-                'clinical' => ['label' => 'Design Workspace', 'desc' => 'Design notes and project workflow'],
-                'staff' => ['label' => 'Designers', 'desc' => 'Designer profiles, commissions and access'],
-                'services' => ['label' => 'Projects', 'desc' => 'Project categories, durations and pricing'],
-            ],
-        ])],
-        'consultancy_firm' => ['name' => 'Consultancy Firm', 'config' => array_replace_recursive($base, [
-            'terms' => [
-                'appointment' => 'Session', 'appointments' => 'Sessions',
-                'patient' => 'Client', 'patients' => 'Clients', 'client' => 'Client', 'clients' => 'Clients',
-                'doctor' => 'Consultant', 'doctors' => 'Consultants',
-                'service' => 'Service', 'services' => 'Services',
-                'treatment' => 'Case', 'treatments' => 'Cases',
-                'clinical' => 'Cases', 'clinicalWorkspace' => 'Case Workspace', 'clinicalNotes' => 'Case Notes',
-                'recall' => 'Renewal Campaign', 'recalls' => 'Renewal Campaigns', 'visit' => 'Session', 'visits' => 'Sessions',
-            ],
-            'dashboard' => [
-                'todayAppointments' => 'Sessions Scheduled',
-                'activePatients' => 'Active Clients',
-                'activeStaff' => 'Active Consultants',
-                'scheduleTitle' => "Today's Sessions",
-                'topStaff' => 'Top Consultants',
-            ],
-            'modules' => [
-                'appointments' => ['label' => 'Sessions', 'desc' => 'Calendar, consultant availability and booking'],
-                'clients' => ['label' => 'Clients', 'desc' => 'Client records, history, dues and renewals'],
-                'clinical' => ['label' => 'Cases', 'desc' => 'Case notes and client workflow'],
-                'staff' => ['label' => 'Consultants', 'desc' => 'Consultant profiles, commissions and access'],
-                'services' => ['label' => 'Services', 'desc' => 'Service categories, durations and pricing'],
-            ],
-        ])],
-        'generic_business' => ['name' => 'Generic Business', 'config' => array_replace_recursive($base, [
-            'terms' => [
-                'appointment' => 'Booking', 'appointments' => 'Bookings',
-                'patient' => 'Customer', 'patients' => 'Customers', 'client' => 'Customer', 'clients' => 'Customers',
-                'doctor' => 'Team Member', 'doctors' => 'Team Members',
-                'service' => 'Service', 'services' => 'Services',
-                'treatment' => 'Work Item', 'treatments' => 'Work Items',
-                'clinical' => 'Work', 'clinicalWorkspace' => 'Work Workspace', 'clinicalNotes' => 'Notes',
-                'recall' => 'Follow-up', 'recalls' => 'Follow-ups', 'visit' => 'Booking', 'visits' => 'Bookings',
-            ],
-            'dashboard' => [
-                'todayAppointments' => 'Bookings Today',
-                'activePatients' => 'Active Customers',
-                'activeStaff' => 'Active Team',
-                'scheduleTitle' => "Today's Bookings",
-                'topStaff' => 'Top Team Members',
-            ],
-            'modules' => [
-                'appointments' => ['label' => 'Bookings', 'desc' => 'Calendar, team availability and booking'],
-                'clients' => ['label' => 'Customers', 'desc' => 'Customer records, history, dues and follow-ups'],
-                'clinical' => ['label' => 'Work', 'desc' => 'Notes and customer workflow'],
-                'staff' => ['label' => 'Team', 'desc' => 'Team profiles, commissions and access'],
-                'services' => ['label' => 'Services', 'desc' => 'Service categories, durations and pricing'],
-            ],
-        ])],
+        ]),
     ];
-    return $templates;
 }
 
 function industry_templates_ensure($db) {
@@ -261,6 +299,11 @@ function industry_templates_list($db) {
     industry_templates_ensure($db);
     $stmt = $db->query("SELECT templateKey, name, configJson, isActive, sortOrder FROM IndustryTemplate WHERE isActive = 1 ORDER BY sortOrder ASC, name ASC");
     $rows = $stmt ? $stmt->fetchAll() : [];
+    // Old built-ins may remain in an upgraded database for tenants already
+    // assigned to them. Keep them resolvable, but expose only the v2 catalog
+    // for new admin selections.
+    $selectable = array_keys(industry_template_builtins());
+    $rows = array_values(array_filter($rows, fn($row) => in_array($row['templateKey'], $selectable, true)));
     return array_map(function ($row) {
         $row['config'] = json_decode($row['configJson'] ?? '{}', true) ?: [];
         $row['isActive'] = !empty($row['isActive']);

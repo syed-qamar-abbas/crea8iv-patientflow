@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, Calendar, CheckCircle2, Loader2, Stethoscope, UserRound } from 'lucide-react';
+import { Activity, Briefcase, Calendar, CheckCircle2, Loader2, Stethoscope, UserRound } from 'lucide-react';
 import { fetchApi } from '../config/api';
 import { useClinic } from '../context/ClinicContext';
 import Badge from '../components/ui/Badge';
@@ -20,8 +20,70 @@ function Stat({ label, value, icon: Icon }) {
   );
 }
 
+function TemplatePipelineBoard({ clients, setClients, template, term }) {
+  const stages = template.config.workflow?.stages || ['new', 'active', 'closed'];
+  const [movingId, setMovingId] = useState('');
+  const move = async (client, workflowStage) => {
+    setMovingId(client.id);
+    try {
+      await fetchApi(`/clients/${client.id}`, { method: 'PUT', body: JSON.stringify({ workflowStage }) });
+      setClients(current => current.map(item => item.id === client.id ? { ...item, workflowStage } : item));
+    } catch (err) {
+      alert(`Stage update failed: ${err.message}`);
+    } finally {
+      setMovingId('');
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">{template.name}</p>
+          <h1 className="mt-1 text-xl font-bold text-gray-950 dark:text-white">{term('clinicalWorkspace', 'Workflow Pipeline')}</h1>
+          <p className="mt-1 text-sm text-gray-500">Move {term('patients', 'records').toLowerCase()} through the template-defined workflow without changing historical data.</p>
+        </div>
+        <div className="rounded-xl bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
+          {clients.length} {term('patients', 'records').toLowerCase()}
+        </div>
+      </div>
+      <div className="flex gap-4 overflow-x-auto pb-4">
+        {stages.map((stage, index) => {
+          const items = clients.filter(client => (client.workflowStage || stages[0]) === stage);
+          return (
+            <section key={stage} className="w-72 shrink-0 rounded-2xl border border-gray-100 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="mb-3 flex items-center justify-between px-1">
+                <h2 className="text-xs font-black capitalize text-gray-800 dark:text-white">{stage.replaceAll('_', ' ')}</h2>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 shadow-sm dark:bg-white/10">{items.length}</span>
+              </div>
+              <div className="space-y-2">
+                {items.map(client => (
+                  <article key={client.id} className="rounded-xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-slate-900">
+                    <div className="flex items-start gap-2">
+                      <div className="rounded-lg bg-indigo-50 p-2 text-indigo-600 dark:bg-indigo-500/10"><Briefcase className="h-4 w-4" /></div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-gray-950 dark:text-white">{client.name}</p>
+                        <p className="truncate text-[11px] text-gray-500">{client.phone || client.email || 'No contact details'}</p>
+                      </div>
+                    </div>
+                    <select disabled={movingId === client.id} value={stage} onChange={event => move(client, event.target.value)} className="mt-3 w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] font-bold capitalize text-gray-600 dark:border-white/10 dark:bg-slate-950 dark:text-gray-200">
+                      {stages.map(option => <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>)}
+                    </select>
+                  </article>
+                ))}
+                {items.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-3 py-8 text-center text-xs text-gray-400 dark:border-white/10">No records in this stage</div>}
+              </div>
+              {index < stages.length - 1 && <p className="mt-3 text-center text-[10px] font-semibold text-gray-300">Next: {stages[index + 1].replaceAll('_', ' ')}</p>}
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function ClinicalWorkspace() {
-  const { term } = useClinic();
+  const { term, industryTemplate, capability } = useClinic();
   const patientLabel = term('patient', 'Patient');
   const patientsLabel = term('patients', 'Patients');
   const appointmentLabel = term('appointment', 'Appointment');
@@ -64,6 +126,10 @@ export default function ClinicalWorkspace() {
   }, [appointments, clients, staff, today]);
 
   if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-indigo-500" /></div>;
+
+  if (capability('pipeline')) {
+    return <TemplatePipelineBoard clients={clients} setClients={setClients} template={industryTemplate} term={term} />;
+  }
 
   return (
     <div className="space-y-5">

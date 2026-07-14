@@ -243,6 +243,7 @@ $routes = [
     // Auth Routes
     ['POST', '^api/v1/auth/register$', 'AuthController', 'register', false],
     ['POST', '^api/v1/auth/login$', 'AuthController', 'login', false],
+    ['GET', '^api/v1/auth/username-availability$', 'AuthController', 'usernameAvailability', false],
     ['POST', '^api/v1/auth/refresh$', 'AuthController', 'refresh', false],
     ['POST', '^api/v1/auth/logout$', 'AuthController', 'logout', false],
     ['POST', '^api/v1/auth/logout-all$', 'AuthController', 'logoutAll', 'auth'],

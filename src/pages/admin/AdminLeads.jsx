@@ -47,7 +47,7 @@ export default function AdminLeads() {
     try {
       const res = await fetchApi(`/admin/leads/${lead.id}/convert`, { method: 'POST' });
       if (res.ownerPassword) {
-        window.alert(`${res.message || 'Clinic created.'}\n\nOwner login\nEmail: ${res.ownerEmail}\nPassword: ${res.ownerPassword}`);
+        window.alert(`${res.message || 'Clinic created.'}\n\nOwner login\nUsername: ${res.ownerUsername}\nPassword: ${res.ownerPassword}\nContact email: ${res.ownerEmail}`);
       }
       await load();
     } catch (e) {

@@ -20,6 +20,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../services/invoiceMath.php';
 require_once __DIR__ . '/../services/packageService.php';
+require_once __DIR__ . '/../services/usernameService.php';
 
 $pass = 0; $fail = 0; $failures = [];
 function check($name, $cond) {
@@ -126,6 +127,22 @@ check('ai enables the AI flags', $pk['ai']['flags']['aiEnabled'] && $pk['ai']['f
 check('ai plan includes every starter module', !array_diff($pk['core']['modules'], $pk['ai']['modules']));
 
 // ---------------------------------------------------------------------------
+echo "== username credentials ==\n";
+check('username normalizes leading @ and case', pf_username_validate('@Front_Desk') === 'front_desk');
+check('username seed sanitizes names', pf_username_sanitize_base('Dr. Smile Owner') === 'dr-smile-owner');
+throws('username rejects email-shaped value', fn() => pf_username_validate('front@clinic.com'), 'InvalidArgumentException');
+
+$usernameDb = new PDO('sqlite::memory:');
+$usernameDb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$usernameDb->exec("CREATE TABLE User (id TEXT PRIMARY KEY, email TEXT NOT NULL)");
+$usernameDb->exec("INSERT INTO User (id, email) VALUES ('11111111-aaaa-bbbb-cccc-111111111111', 'one@example.test'), ('22222222-aaaa-bbbb-cccc-222222222222', 'two@example.test')");
+$usernameDb->exec(file_get_contents(__DIR__ . '/../migrations/2026-07-14-usernames.sqlite.sql'));
+$usernames = $usernameDb->query("SELECT username FROM User ORDER BY id")->fetchAll(PDO::FETCH_COLUMN);
+check('username migration backfills existing accounts', $usernames === ['user-11111111', 'user-22222222']);
+check('username availability sees existing usernames', !pf_username_available($usernameDb, 'user-11111111'));
+check('username availability supports self-exclusion', pf_username_available($usernameDb, 'user-11111111', '11111111-aaaa-bbbb-cccc-111111111111'));
+
+// ---------------------------------------------------------------------------
 echo "== secure check-in integration ==\n";
 $focusedCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/checkin-token-tests.php');
 passthru($focusedCommand, $focusedStatus);
@@ -136,6 +153,18 @@ echo "== operations-only safety integration ==\n";
 $safetyCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/clinical-safety-tests.php');
 passthru($safetyCommand, $safetyStatus);
 check('focused operations-only safety suite passes', $safetyStatus === 0);
+
+// ---------------------------------------------------------------------------
+echo "== industry template integration ==\n";
+$templateCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/industry-template-tests.php');
+passthru($templateCommand, $templateStatus);
+check('focused industry template suite passes', $templateStatus === 0);
+
+// ---------------------------------------------------------------------------
+echo "== migration runner integration ==\n";
+$migrationCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/migration-runner-tests.php');
+passthru($migrationCommand, $migrationStatus);
+check('focused migration runner suite passes', $migrationStatus === 0);
 
 // ---------------------------------------------------------------------------
 echo "\n$pass passed, $fail failed\n";

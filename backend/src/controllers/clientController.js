@@ -28,7 +28,7 @@ async function getById(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const data = req.body;
+    const data = { ...req.body };
     data.clinicId = req.user.clinicId;
     if (!data.patientNo) {
       const count = await prisma.client.count({ where: { clinicId: req.user.clinicId } });
@@ -36,6 +36,7 @@ async function create(req, res, next) {
     }
     if (Array.isArray(data.specialty)) data.specialty = JSON.stringify(data.specialty);
     if (Array.isArray(data.medicalHistory)) data.medicalHistory = JSON.stringify(data.medicalHistory);
+    if (data.profileData && typeof data.profileData === 'object') data.profileData = JSON.stringify(data.profileData);
     if (!data.initials && data.name) data.initials = data.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
     const client = await prisma.client.create({ data });
     res.locals.entityId = client.id;
@@ -45,9 +46,10 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const data = req.body;
+    const data = { ...req.body };
     if (Array.isArray(data.specialty)) data.specialty = JSON.stringify(data.specialty);
     if (Array.isArray(data.medicalHistory)) data.medicalHistory = JSON.stringify(data.medicalHistory);
+    if (data.profileData && typeof data.profileData === 'object') data.profileData = JSON.stringify(data.profileData);
     delete data.clinicId;
     const client = await prisma.client.updateMany({ where: { id: req.params.id, clinicId: req.user.clinicId }, data });
     res.json(client);

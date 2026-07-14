@@ -2,7 +2,14 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { fetchApi, fetchPublicApi } from '../config/api';
 import { getLogoInitials, syncBrandingMetadata } from '../utils/branding';
 import { PORTAL_CLINIC_SLUG } from '../config/portalPath';
-import { HEALTHCARE_TEMPLATE_KEY, resolveIndustryTemplate, termFromTemplate } from '../config/industryTemplates';
+import {
+  HEALTHCARE_TEMPLATE_KEY,
+  isTemplateModuleVisible,
+  resolveIndustryTemplate,
+  templateCapability,
+  templateModule,
+  termFromTemplate,
+} from '../config/industryTemplates';
 
 // A signed-in clinic user (not the platform superadmin) should always see
 // their own clinic's saved branding, regardless of which domain they use.
@@ -85,7 +92,7 @@ const defaultFeatures = {
   aiHumanApprovalRequired: true,
   monthlyAiTokenLimit: 0,
   monthlyWhatsAppLimit: 0,
-  package: { key: 'core', name: 'Starter', pricePKR: 50000, annualPricePKR: 50000 },
+  package: { key: 'core', name: 'Starter', pricePKR: 25000, annualPricePKR: 150000 },
   subscription: null,
 };
 
@@ -193,6 +200,9 @@ export function ClinicProvider({ children }) {
   };
 
   const term = (key, fallback = '') => termFromTemplate(industryTemplate, key, fallback);
+  const capability = (key, fallback = false) => templateCapability(industryTemplate, key, fallback);
+  const moduleConfig = (key) => templateModule(industryTemplate, key);
+  const moduleVisible = (key) => isTemplateModuleVisible(industryTemplate, key);
 
   const value = useMemo(() => ({
     activeSpecialty,
@@ -201,6 +211,9 @@ export function ClinicProvider({ children }) {
     features,
     industryTemplate,
     term,
+    capability,
+    moduleConfig,
+    moduleVisible,
     featuresLoaded,
     updateClinicInfo,
     clinicMatched,

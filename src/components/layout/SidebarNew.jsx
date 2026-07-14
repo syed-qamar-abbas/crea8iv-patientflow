@@ -75,6 +75,7 @@ const FEATURE_LOCKS = {
 };
 
 const MODULE_KEYS = {
+  '/dashboard': 'dashboard',
   '/reception': 'reception',
   '/appointments': 'appointments',
   '/clients': 'clients',
@@ -111,8 +112,16 @@ export default function SidebarNew() {
   const packageInfo = features.package || {};
   const planName = subscription?.packageName || packageInfo.name || 'Starter';
   const planCycle = subscription?.billingCycle || 'monthly';
-  const planAmount = subscription?.amountPKR || packageInfo.pricePKR || 0;
+  const planAmount = planCycle === 'annual'
+    ? (packageInfo.annualPricePKR || packageInfo.pricePKR || 0)
+    : (packageInfo.pricePKR || 0);
   const expiresAt = subscription?.expiresAt ? String(subscription.expiresAt).slice(0, 10) : '';
+  const allNavItems = navGroups.flatMap(group => group.items);
+  const navigationGroups = (industryTemplate.config.navigation?.groups || []).map(group => ({
+    label: group.label,
+    items: (group.modules || []).map(moduleKey => allNavItems.find(item => MODULE_KEYS[item.to] === moduleKey)).filter(Boolean),
+  }));
+  const effectiveNavGroups = navigationGroups.length ? navigationGroups : navGroups;
 
   return (
     <aside
@@ -170,7 +179,7 @@ export default function SidebarNew() {
 
       {/* Navigation */}
       <nav className="relative z-10 flex-1 px-2 py-3 overflow-y-auto space-y-4">
-        {navGroups.map(group => {
+        {effectiveNavGroups.map(group => {
           // A module is visible only when the role can reach it AND, if it is a
           // plan-gated feature, the clinic's plan includes it. Starter clinics
           // never see AI / Marketing / WhatsApp / Meta Leads / Imports.
@@ -178,6 +187,8 @@ export default function SidebarNew() {
             if (!canAccessPath(item.to, role)) return false;
             const featureKey = FEATURE_LOCKS[item.to];
             if (featureKey && !features[featureKey]) return false;
+            const templateModule = industryTemplate.config.modules?.[MODULE_KEYS[item.to]];
+            if (templateModule?.visible === false) return false;
             return true;
           });
           if (visibleItems.length === 0) return null;

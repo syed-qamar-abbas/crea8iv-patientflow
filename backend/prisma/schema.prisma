@@ -61,6 +61,7 @@ model User {
   id           String    @id @default(uuid())
   clinicId     String
   name         String
+  username     String?   @unique
   email        String    @unique
   password     String
   role         String    @default("receptionist")
@@ -142,6 +143,8 @@ model Client {
   avatarColor        String   @default("#6366f1")
   initials           String?
   notes              String?
+  profileData        String?
+  workflowStage      String?
   portalEmail        String?
   portalPasswordHash String?
   referredBy         String?
@@ -191,6 +194,7 @@ model Appointment {
   notes       String?
   price       Float
   specialty   String
+  eventType   String    @default("appointment")
   checkedIn   Boolean   @default(false)
   checkinTime DateTime?
   qrCode      String?

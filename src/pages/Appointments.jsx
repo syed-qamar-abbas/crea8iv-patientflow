@@ -53,11 +53,12 @@ function AppointmentDetail({ appt, onClose, onEdit, onDelete, onWhatsApp, onResc
         </div>
         <div className="grid grid-cols-2 gap-3">
           {[
+            { label: 'Type', value: (appt.eventType || 'appointment').replaceAll('_', ' ') },
             { label: 'Date', value: appt.date },
             { label: 'Time', value: `${appt.startTime} – ${appt.endTime || ''}` },
             { label: 'Duration', value: appt.duration ? `${appt.duration} min` : '—' },
             { label: 'Room', value: appt.room || '—' },
-            { label: 'Treatment Fee', value: money(getTreatmentFee(appt)) },
+            { label: `${term('service', 'Service')} Fee`, value: money(getTreatmentFee(appt)) },
           ].map(({ label, value }) => (
             <div key={label} className="bg-gray-50 dark:bg-white/5 rounded-xl p-3">
               <p className="text-[10px] text-gray-400 uppercase tracking-wider">{label}</p>
@@ -106,13 +107,15 @@ function AppointmentDetail({ appt, onClose, onEdit, onDelete, onWhatsApp, onResc
 const emptyForm = {
   clientId: '', staffId: '', serviceId: '', otherTreatment: '',
   price: '',
-  date: new Date().toISOString().slice(0, 10),
+  eventType: 'appointment', date: new Date().toISOString().slice(0, 10),
   startTime: '10:00', duration: 30, room: '', notes: '', status: 'pending',
 };
 
-function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff, services, saving, term }) {
+function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff, services, saving, term, template }) {
   const isEdit = !!target;
   const [form, setForm] = useState(emptyForm);
+  const scheduling = template.config.scheduling || {};
+  const eventTypes = scheduling.eventTypes || [{ key: 'appointment', label: term('appointment', 'Appointment') }];
 
   useEffect(() => {
     if (target) {
@@ -122,6 +125,7 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
         serviceId: target.serviceId || target.service?.id || '',
         otherTreatment: target.otherTreatment || '',
         price: target.price ?? '',
+        eventType: target.eventType || scheduling.defaultEventType || eventTypes[0]?.key || 'appointment',
         date: target.date ? String(target.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
         startTime: target.startTime || '10:00',
         duration: target.duration || 30,
@@ -130,9 +134,9 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
         status: target.status || 'pending',
       });
     } else {
-      setForm(emptyForm);
+      setForm({ ...emptyForm, eventType: scheduling.defaultEventType || eventTypes[0]?.key || 'appointment' });
     }
-  }, [target, isOpen]);
+  }, [target, isOpen, template.templateKey]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const showOther = form.serviceId === 'other';
@@ -167,6 +171,7 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
       notes: form.notes,
       status: form.status,
       price: Number(form.price) || 0,
+      eventType: form.eventType,
     };
     onSave(payload);
   };
@@ -176,6 +181,14 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? `Edit ${term('appointment', 'Appointment')}` : `New ${term('appointment', 'Appointment')}`} size="md">
       <div className="space-y-4">
+        {eventTypes.length > 1 && (
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{term('appointment', 'Appointment')} Type *</label>
+            <select className={inputCls} value={form.eventType} onChange={e => set('eventType', e.target.value)}>
+              {eventTypes.map(type => <option key={type.key} value={type.key}>{type.label}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{term('patient', 'Patient')} *</label>
           <PatientSearchSelect
@@ -202,7 +215,7 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
           </div>
         )}
         <div>
-          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Treatment Fee *</label>
+          <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{term('service', 'Service')} Fee *</label>
           <input type="number" min="0" value={form.price} onChange={e => set('price', e.target.value)} className={inputCls} />
         </div>
         {(selectedService || showOther) && (
@@ -335,7 +348,7 @@ function RescheduleModal({ appt, onClose, onDone, term }) {
 }
 
 export default function Appointments() {
-  const { term } = useClinic();
+  const { term, industryTemplate } = useClinic();
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState(() => {
     const c = peekApiCacheByPrefix('/appointments');
@@ -597,6 +610,7 @@ export default function Appointments() {
         services={services}
         saving={saving}
         term={term}
+        template={industryTemplate}
       />
       <DeleteConfirmModal
         isOpen={!!deleteTarget}
