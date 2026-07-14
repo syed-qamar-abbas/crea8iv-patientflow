@@ -194,6 +194,131 @@ function pf_migration_record($db, $file, $executionMs, $owner) {
     $stmt->execute([$file['name'], $file['checksum'], pf_migration_driver(), pf_migration_now(), $executionMs, $owner]);
 }
 
+function pf_migration_is_duplicate_column_error($e) {
+    $message = $e->getMessage();
+    return strpos((string)$e->getCode(), '42S21') !== false
+        || strpos($message, '1060') !== false
+        || stripos($message, 'Duplicate column') !== false
+        || stripos($message, 'duplicate column name') !== false;
+}
+
+function pf_migration_split_top_level_commas($sql) {
+    $parts = [];
+    $buffer = '';
+    $quote = null;
+    $depth = 0;
+    $len = strlen($sql);
+
+    for ($i = 0; $i < $len; $i++) {
+        $ch = $sql[$i];
+
+        if ($quote !== null) {
+            $buffer .= $ch;
+            if ($ch === '\\' && $quote !== '`' && $i + 1 < $len) {
+                $buffer .= $sql[++$i];
+                continue;
+            }
+            if ($ch === $quote) {
+                if ($quote !== '`' && $i + 1 < $len && $sql[$i + 1] === $quote) {
+                    $buffer .= $sql[++$i];
+                    continue;
+                }
+                $quote = null;
+            }
+            continue;
+        }
+
+        if ($ch === "'" || $ch === '"' || $ch === '`') {
+            $quote = $ch;
+            $buffer .= $ch;
+            continue;
+        }
+
+        if ($ch === '(') $depth++;
+        if ($ch === ')' && $depth > 0) $depth--;
+
+        if ($ch === ',' && $depth === 0) {
+            $part = trim($buffer);
+            if ($part !== '') $parts[] = $part;
+            $buffer = '';
+            continue;
+        }
+
+        $buffer .= $ch;
+    }
+
+    $part = trim($buffer);
+    if ($part !== '') $parts[] = $part;
+    return $parts;
+}
+
+function pf_migration_unquote_identifier($identifier) {
+    $identifier = trim($identifier);
+    if (strlen($identifier) >= 2 && $identifier[0] === '`' && substr($identifier, -1) === '`') {
+        return str_replace('``', '`', substr($identifier, 1, -1));
+    }
+    return $identifier;
+}
+
+function pf_migration_parse_mysql_add_columns($statement) {
+    if (!preg_match('/^ALTER\s+TABLE\s+((?:`[^`]+`)|[A-Za-z_][A-Za-z0-9_]*)\s+(.+)$/is', trim($statement), $match)) {
+        return null;
+    }
+
+    $tableName = pf_migration_unquote_identifier($match[1]);
+    $clauses = pf_migration_split_top_level_commas($match[2]);
+    if (!$clauses) return null;
+
+    $columns = [];
+    foreach ($clauses as $clause) {
+        if (!preg_match('/^ADD\s+COLUMN\s+((?:`[^`]+`)|[A-Za-z_][A-Za-z0-9_]*)(\s+.+)$/is', trim($clause), $columnMatch)) {
+            return null;
+        }
+        $columns[] = [
+            'name' => pf_migration_unquote_identifier($columnMatch[1]),
+            'definition' => trim($columnMatch[1] . $columnMatch[2]),
+        ];
+    }
+
+    return [
+        'table' => $tableName,
+        'columns' => $columns,
+    ];
+}
+
+function pf_migration_mysql_column_exists($db, $tableName, $columnName) {
+    $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
+    $stmt->execute([$tableName, $columnName]);
+    return (int)$stmt->fetchColumn() > 0;
+}
+
+function pf_migration_try_mysql_add_missing_columns($db, $statement) {
+    if (pf_migration_driver() !== 'mysql') return false;
+
+    $parsed = pf_migration_parse_mysql_add_columns($statement);
+    if (!$parsed) return false;
+
+    foreach ($parsed['columns'] as $column) {
+        if (pf_migration_mysql_column_exists($db, $parsed['table'], $column['name'])) {
+            continue;
+        }
+        $db->exec('ALTER TABLE `' . str_replace('`', '``', $parsed['table']) . '` ADD COLUMN ' . $column['definition']);
+    }
+
+    return true;
+}
+
+function pf_migration_exec_statement($db, $statement) {
+    try {
+        $db->exec($statement);
+    } catch (Throwable $e) {
+        if (pf_migration_is_duplicate_column_error($e) && pf_migration_try_mysql_add_missing_columns($db, $statement)) {
+            return;
+        }
+        throw $e;
+    }
+}
+
 function pf_migration_run_file($db, $file, $owner) {
     $start = microtime(true);
     $sql = file_get_contents($file['path']);
@@ -201,7 +326,7 @@ function pf_migration_run_file($db, $file, $owner) {
         throw new MigrationException("Unable to read migration {$file['name']}");
     }
     foreach (pf_migration_split_sql($sql) as $statement) {
-        $db->exec($statement);
+        pf_migration_exec_statement($db, $statement);
     }
     $executionMs = (int)round((microtime(true) - $start) * 1000);
     pf_migration_record($db, $file, $executionMs, $owner);

@@ -66,6 +66,11 @@ migration_check('migration SQL executed', $db->query("SELECT note FROM Beta WHER
 migration_check('ledger records applied migrations', (int)$db->query("SELECT COUNT(*) FROM SchemaMigration")->fetchColumn() === 2);
 migration_check('rerun is idempotent', count(pf_migration_migrate($db, $dir, ['owner' => 'test'])['applied']) === 0);
 
+$addColumns = pf_migration_parse_mysql_add_columns("ALTER TABLE WhatsAppSetting ADD COLUMN quietHoursStart VARCHAR(10) DEFAULT '21:00', ADD COLUMN lastWebhookError TEXT");
+migration_check('mysql add-column parser reads table name', $addColumns['table'] === 'WhatsAppSetting');
+migration_check('mysql add-column parser reads all column names', array_column($addColumns['columns'], 'name') === ['quietHoursStart', 'lastWebhookError']);
+migration_check('mysql add-column parser rejects non-add-column alter', pf_migration_parse_mysql_add_columns('ALTER TABLE Clinic DROP COLUMN oldField') === null);
+
 migration_write($dir, '2026-01-02-beta.sqlite.sql', "CREATE TABLE Beta (id TEXT PRIMARY KEY, note TEXT);\n");
 migration_expect('edited applied migration is rejected by checksum', MigrationChecksumException::class, fn() => pf_migration_migrate($db, $dir, ['owner' => 'test']));
 
