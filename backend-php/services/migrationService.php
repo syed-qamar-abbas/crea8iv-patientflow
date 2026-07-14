@@ -108,7 +108,6 @@ function pf_migration_acquire_lock($db, $owner) {
 }
 
 function pf_migration_release_lock($db) {
-    pf_migration_ensure_tables($db);
     $db->exec("DELETE FROM SchemaMigrationLock WHERE lockName = 'migrations'");
 }
 
