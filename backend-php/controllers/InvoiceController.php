@@ -158,19 +158,27 @@ class InvoiceController {
         $stmtCount->execute($params);
         $total = intval($stmtCount->fetchColumn());
 
-        $statsSql = "SELECT COALESCE(SUM(i.grandTotal), 0) AS invoiced,
-                            COALESCE(SUM(i.amountPaid), 0) AS paid,
-                            COALESCE(SUM(i.balanceDue), 0) AS balance
-                     FROM Invoice i
-                     LEFT JOIN Client c ON i.clientId = c.id AND c.clinicId = i.clinicId
-                     WHERE $whereSql";
-        $stmtStats = $db->prepare($statsSql);
-        $stmtStats->execute($params);
-        $stats = $stmtStats->fetch() ?: ['invoiced' => 0, 'paid' => 0, 'balance' => 0];
+        // Receptionists need invoice-level amounts to prepare and collect bills,
+        // but clinic-wide totals are business financial analytics. Do not even
+        // calculate those aggregates for roles that cannot manage financials.
+        $canSeeAggregateFinancials = in_array($user['role'] ?? '', ['owner', 'manager', 'accountant'], true);
+        $stats = null;
+        $patientDues = null;
+        if ($canSeeAggregateFinancials) {
+            $statsSql = "SELECT COALESCE(SUM(i.grandTotal), 0) AS invoiced,
+                                COALESCE(SUM(i.amountPaid), 0) AS paid,
+                                COALESCE(SUM(i.balanceDue), 0) AS balance
+                         FROM Invoice i
+                         LEFT JOIN Client c ON i.clientId = c.id AND c.clinicId = i.clinicId
+                         WHERE $whereSql";
+            $stmtStats = $db->prepare($statsSql);
+            $stmtStats->execute($params);
+            $stats = $stmtStats->fetch() ?: ['invoiced' => 0, 'paid' => 0, 'balance' => 0];
 
-        $stmtDues = $db->prepare("SELECT COALESCE(SUM(outstandingBalance), 0) FROM Client WHERE clinicId = ? AND status != 'inactive'");
-        $stmtDues->execute([$user['clinicId']]);
-        $patientDues = floatval($stmtDues->fetchColumn() ?: 0);
+            $stmtDues = $db->prepare("SELECT COALESCE(SUM(outstandingBalance), 0) FROM Client WHERE clinicId = ? AND status != 'inactive'");
+            $stmtDues->execute([$user['clinicId']]);
+            $patientDues = floatval($stmtDues->fetchColumn() ?: 0);
+        }
         
         $sql = "SELECT i.*,
                        (SELECT COALESCE(SUM(procedureCost), 0) FROM InvoiceProcedureCost pc WHERE pc.invoiceId = i.id AND pc.clinicId = i.clinicId) AS procedureCost,
@@ -234,19 +242,22 @@ class InvoiceController {
         }
 
         if ($paginated) {
-            send_json([
+            $response = [
                 'invoices' => $formatted,
                 'total' => $total,
                 'page' => $page,
                 'pages' => max(1, (int)ceil($total / $limit)),
                 'limit' => $limit,
-                'stats' => [
+            ];
+            if ($canSeeAggregateFinancials) {
+                $response['stats'] = [
                     'invoiced' => floatval($stats['invoiced'] ?? 0),
                     'paid' => floatval($stats['paid'] ?? 0),
                     'balance' => floatval($stats['balance'] ?? 0),
                     'patientDues' => $patientDues,
-                ],
-            ]);
+                ];
+            }
+            send_json($response);
         }
         send_json($formatted);
     }

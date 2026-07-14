@@ -300,6 +300,7 @@ function InvoiceDetailModal({ invoice, isOpen, onClose, onMarkPaid, onRefund, on
 
 export default function Invoices() {
   const receptionist = isReceptionist();
+  const canSeeAggregateFinancials = canViewBusinessFinancials();
   const canAdminInvoice = canManageInvoiceAdmin();
   const { term } = useClinic();
   const patientLabel = term('patient', 'Patient');
@@ -498,19 +499,21 @@ export default function Invoices() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {[
-          ['Total Invoiced', stats.invoiced],
-          ['Paid', stats.paid],
-          ['Balance Due', stats.balance],
-          [`${patientLabel} Dues`, stats.patientDues],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-            <div className="mb-3 flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</p><Receipt className="h-4 w-4 text-[var(--primary)]" /></div>
-            <p className="text-xl font-black text-gray-900 dark:text-white">{money(value)}</p>
-          </div>
-        ))}
-      </div>
+      {canSeeAggregateFinancials && (
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {[
+            ['Total Invoiced', stats.invoiced],
+            ['Paid', stats.paid],
+            ['Balance Due', stats.balance],
+            [`${patientLabel} Dues`, stats.patientDues],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
+              <div className="mb-3 flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</p><Receipt className="h-4 w-4 text-[var(--primary)]" /></div>
+              <p className="text-xl font-black text-gray-900 dark:text-white">{money(value)}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
         <div className="relative min-w-[220px] flex-1">

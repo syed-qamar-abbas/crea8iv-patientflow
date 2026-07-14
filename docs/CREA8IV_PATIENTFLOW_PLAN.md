@@ -74,7 +74,7 @@ Scope: Transform the existing Smile Xperts clinic portal into a multi-tenant Saa
 
 **Recommendation: Shared database, shared schema, row-level isolation by `clinicId`** — exactly what you have, hardened.
 
-Why not DB-per-tenant: at PKR 30k/month per clinic with manual onboarding, a DB-per-tenant model multiplies your migration, backup, and connection overhead for zero customer-visible benefit. Row-level isolation with disciplined `clinicId` scoping + a tenant-guard middleware scales comfortably past 1,000 clinics on a single well-indexed MySQL instance (your tables are small per clinic: even 1,000 clinics × 5,000 patients = 5M rows — trivial for MySQL with `(clinicId, …)` composite indexes).
+Why not DB-per-tenant: at PKR 25k/month per clinic with manual onboarding, a DB-per-tenant model multiplies your migration, backup, and connection overhead for zero customer-visible benefit. Row-level isolation with disciplined `clinicId` scoping + a tenant-guard middleware scales comfortably past 1,000 clinics on a single well-indexed MySQL instance (your tables are small per clinic: even 1,000 clinics × 5,000 patients = 5M rows — trivial for MySQL with `(clinicId, …)` composite indexes).
 
 Enforcement upgrades:
 1. **Composite indexes** `(clinicId, createdAt)` / `(clinicId, status)` on the big tables (Client, Appointment, Invoice, WhatsAppMessage)
@@ -164,7 +164,7 @@ CREATE TABLE Subscription (
   id VARCHAR(36) PRIMARY KEY,
   clinicId VARCHAR(36) NOT NULL,
   billingCycle ENUM('monthly','annual') NOT NULL,
-  amountPKR DECIMAL(12,2) NOT NULL,      -- 30000 or 240000
+  amountPKR DECIMAL(12,2) NOT NULL,      -- 25000 monthly or 150000 annual
   startsAt DATETIME NOT NULL,
   expiresAt DATETIME NOT NULL,           -- drives suspension cron
   status ENUM('active','grace','expired','cancelled') DEFAULT 'active',
@@ -324,7 +324,7 @@ A separate small React app (`admin.crea8ivpatientflow.com`) reusing your existin
 - **System health**: API health endpoint, DB ping, last cron run timestamps, per-tenant WhatsApp connectivity status (you already have `whatsapp/health` per clinic — aggregate it)
 
 ### 4.3 Public website (new — marketing)
-Static/lightweight site at `www.crea8ivpatientflow.com`: Home, Features, Pricing (PKR 30,000/mo or PKR 20,000/mo billed annually — lead with the annual saving), Industries (Dental / Aesthetic / Medical / Multi-branch), Demo Request, Register Clinic (→ `RegistrationLead`), Contact. Build with plain Vite/Astro — don't couple it to the app.
+Static/lightweight site at `www.crea8ivpatientflow.com`: Home, Features, Pricing (Starter PKR 25,000/mo or PKR 150,000/year with 50% off when paid annually — lead with the annual saving), Industries (Dental / Aesthetic / Medical / Multi-branch), Demo Request, Register Clinic (→ `RegistrationLead`), Contact. Build with plain Vite/Astro — don't couple it to the app.
 
 ---
 
@@ -337,7 +337,7 @@ Static/lightweight site at `www.crea8ivpatientflow.com`: Home, Features, Pricing
 | Scale | 50–300 | Separate managed MySQL; object storage for uploads/backups; 2 app servers behind LB if needed | $100–250 |
 | Big | 300–1,000+ | Read replicas, Redis for rate limiting/queues, queue worker for WhatsApp sends | $400+ |
 
-The architecture (stateless PHP API + JWT + row-level tenancy) requires **no redesign** at any of these steps — only hardware moves. At PKR 30k/clinic/month, infra stays under 2% of revenue throughout.
+The architecture (stateless PHP API + JWT + row-level tenancy) requires **no redesign** at any of these steps — only hardware moves. At PKR 25k/clinic/month, infra stays under 2% of revenue throughout.
 
 **Bottlenecks & answers:**
 1. *WhatsApp webhook fan-in* — one Meta webhook receives all tenants' messages; route by `phone_number_id → WhatsAppSetting.clinicId` lookup (indexed). Queue sends in `WhatsAppQueue` (exists) and process via cron to respect Meta rate limits.

@@ -13,7 +13,7 @@
 Clinics that depend on repeat visits: dental, orthodontic, skin, aesthetic, hair transplant, medical, IVF and cosmetic practices. Single location or multi-branch.
 
 ## Pricing
-- Starter — PKR 50,000/month, with a PKR 50,000 yearly upfront offer: appointments, operational patient profiles, billing, staff roles, booking website, daily backups. Unlimited staff and patients.
+- Starter — PKR 25,000/month, or PKR 150,000/year when paid in advance (50% off): appointments, operational patient profiles, billing, staff roles, booking website, daily backups. Unlimited staff and patients.
 - AppointmentFlow AI — PKR 40,000/month, or PKR 336,000/year when paid in advance (30% off): everything in Starter plus WhatsApp shared inbox, automated reminders, recall/reactivation campaigns, broadcasts, an administrative AI receptionist and advanced analytics. Clinical AI advice and treatment-note generation are disabled.
 
 ## Proof

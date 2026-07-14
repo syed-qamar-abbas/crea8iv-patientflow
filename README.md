@@ -281,6 +281,17 @@ composer install --no-dev --prefer-dist --optimize-autoloader
 
 The PHP app deploys by copying `backend-php/` (including the generated `vendor/` directory) to the server's `app/` directory. Files **excluded** from deploys: `.env`, `uploads/`, `logs/`, `backups/`. **The MySQL database is never touched by file deploys.** Apply the additive secure-check-in-token migration before enabling QR issuance.
 
+### Database migrations
+Schema changes are tracked by the CLI-only migration ledger in `backend-php/scripts/migrate.php`:
+
+```bash
+php backend-php/scripts/migrate.php status
+php backend-php/scripts/migrate.php dry-run
+php backend-php/scripts/migrate.php migrate
+```
+
+For an existing database that has already received the current migrations manually or through runtime self-heal code, run `php backend-php/scripts/migrate.php baseline` once during a maintenance window, then use `status` and `migrate` for future schema changes. The runner records SHA-256 checksums and refuses to run if an applied migration file is edited.
+
 ### Safety net (`pf-safe`)
 The server keeps a `pf-safe/` self-heal copy of the app, portal, and `.htaccess` plus periodic DB dumps, so an accidental overwrite by the co-hosted marketing site auto-recovers. See the deployment runbook.
 

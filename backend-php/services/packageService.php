@@ -48,9 +48,9 @@ function pf_packages() {
 
     return [
         'core' => [
-            'key' => 'core', 'name' => 'Starter', 'pricePKR' => 50000,
-            'annualPricePKR' => 50000,
-            'annualNote' => 'Yearly offer requires full advance payment.',
+            'key' => 'core', 'name' => 'Starter', 'pricePKR' => 25000,
+            'annualPricePKR' => 150000,
+            'annualNote' => '50% off when paid yearly in advance.',
             'tagline' => 'Everything to run the clinic day-to-day.',
             'flags' => $core,
             'modules' => $starterModules,
