@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, Clock, CreditCard, FileText, Image as ImageIcon, Loader2, Mail, MessageCircle, Phone, Save, Trash2, Upload, UserRound } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, CreditCard, FileText, Image as ImageIcon, Loader2, Mail, Phone, Save, Trash2, Upload, UserRound } from 'lucide-react';
 import { fetchApi, API_URL } from '../config/api';
 import { useClinic } from '../context/ClinicContext';
 
@@ -75,6 +75,8 @@ function PatientDocuments({ clientId }) {
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import ToothPicker from '../components/clinical/ToothPicker';
+import WhatsAppActionButton from '../components/outreach/WhatsAppActionButton';
+import { MANUAL_WHATSAPP_TEMPLATES } from '../utils/whatsapp';
 
 const money = (value) => `PKR ${Number(value || 0).toLocaleString()}`;
 
@@ -427,9 +429,7 @@ export default function ClientProfile() {
           <ArrowLeft className="h-4 w-4" /> Back to {patientsLabel}
         </button>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" onClick={() => navigate(`/whatsapp?client=${client.id}`)}>
-            <MessageCircle className="h-4 w-4" /> WhatsApp
-          </Button>
+          <WhatsAppActionButton client={client} template={MANUAL_WHATSAPP_TEMPLATES.find(t => t.key === 'follow_up')} />
           <Button size="sm" onClick={() => navigate('/appointments')}>
             <Calendar className="h-4 w-4" /> Book {appointmentLabel}
           </Button>

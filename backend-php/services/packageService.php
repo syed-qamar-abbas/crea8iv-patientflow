@@ -38,7 +38,7 @@ function pf_packages() {
     $starterModules = [
         'Dashboard', 'Reception Desk', 'Patients', 'Appointments', 'Clinical',
         'Services', 'Billing', 'Packages', 'Reports', 'Inventory', 'Gallery',
-        'Feedback', 'Staff', 'Settings', 'Branding', 'Voice Notes', 'Customizations',
+        'Feedback', 'Staff', 'Manual WhatsApp Outreach', 'Settings', 'Branding', 'Voice Notes', 'Customizations',
     ];
     $aiExtraModules = [
         'AI Hub', 'WhatsApp Center', 'Meta Leads', 'Marketing', 'Growth',

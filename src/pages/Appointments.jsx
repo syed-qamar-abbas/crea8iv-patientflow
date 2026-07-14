@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Calendar as CalendarIcon, List, Plus, X, ChevronRight, Pencil, Trash2, Save, Loader2, MessageCircle, CalendarClock, QrCode } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Calendar as CalendarIcon, List, Plus, X, ChevronRight, Pencil, Trash2, Save, Loader2, CalendarClock, QrCode } from 'lucide-react';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -13,6 +12,8 @@ import Modal from '../components/ui/Modal';
 import Table from '../components/ui/Table';
 import PatientSearchSelect from '../components/ui/PatientSearchSelect';
 import QRCheckin from '../components/ui/QRCheckin';
+import WhatsAppActionButton, { buildClientMessage } from '../components/outreach/WhatsAppActionButton';
+import { MANUAL_WHATSAPP_TEMPLATES, openWhatsAppMessage } from '../utils/whatsapp';
 
 const localizer = momentLocalizer(moment);
 
@@ -32,7 +33,7 @@ const computeEndTime = (start, durationMins) => {
   return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
 };
 
-function AppointmentDetail({ appt, onClose, onEdit, onDelete, onWhatsApp, onReschedule, onQr, term }) {
+function AppointmentDetail({ appt, onClose, onEdit, onDelete, onReschedule, onQr, term }) {
   if (!appt) return null;
   const name = apptClientName(appt);
   return (
@@ -89,9 +90,7 @@ function AppointmentDetail({ appt, onClose, onEdit, onDelete, onWhatsApp, onResc
           <CalendarClock className="w-4 h-4" /> Reschedule
         </Button>
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" className="justify-center" onClick={() => onWhatsApp(appt)}>
-            <MessageCircle className="w-4 h-4" /> WhatsApp
-          </Button>
+          <WhatsAppActionButton client={appt.client || { id: appt.clientId, name: appt.clientName, phone: appt.clientPhone }} appointment={appt} template={MANUAL_WHATSAPP_TEMPLATES.find(t => t.key === 'appointment_reminder')} />
           <Button variant="primary" size="sm" className="flex-1 justify-center" onClick={() => onEdit(appt)}>
             <Pencil className="w-4 h-4" /> Edit
           </Button>
@@ -298,7 +297,7 @@ function RescheduleModal({ appt, onClose, onDone, term }) {
   const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const navigate = useNavigate();
+  const { clinicInfo } = useClinic();
 
   useEffect(() => {
     if (appt) {
@@ -316,7 +315,17 @@ function RescheduleModal({ appt, onClose, onDone, term }) {
     try {
       await fetchApi(`/appointments/${appt.id}/reschedule`, { method: 'PUT', body: JSON.stringify({ date, startTime: time }) });
       const clientId = appt.clientId || appt.client?.id;
-      if (notify && clientId) navigate(`/whatsapp?client=${clientId}`);
+      const client = appt.client || { id: clientId, name: appt.clientName, phone: appt.clientPhone };
+      if (notify && clientId) {
+        const template = MANUAL_WHATSAPP_TEMPLATES.find(t => t.key === 'appointment_reminder');
+        const message = buildClientMessage({ clinicName: clinicInfo.name, client, appointment: { ...appt, date, startTime: time }, template });
+        if (openWhatsAppMessage(client.phone, message)) {
+          await fetchApi('/manual-outreach/logs', {
+            method: 'POST',
+            body: JSON.stringify({ clientId, appointmentId: appt.id, purpose: 'appointment_reminder', message, status: 'opened' }),
+          }).catch(() => null);
+        }
+      }
       onDone();
     } catch (e) {
       setErr(e.message || 'Could not reschedule.');
@@ -349,7 +358,6 @@ function RescheduleModal({ appt, onClose, onDone, term }) {
 
 export default function Appointments() {
   const { term, industryTemplate } = useClinic();
-  const navigate = useNavigate();
   const [appointments, setAppointments] = useState(() => {
     const c = peekApiCacheByPrefix('/appointments');
     return Array.isArray(c) ? c : (c?.appointments ?? []);
@@ -499,10 +507,12 @@ export default function Appointments() {
             className="text-indigo-600 hover:text-indigo-800 text-xs font-medium flex items-center gap-1 px-2">
             View <ChevronRight className="w-3 h-3" />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); navigate(`/whatsapp?client=${r.clientId || r.client?.id}`); }}
-            className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600">
-            <MessageCircle className="w-3.5 h-3.5" />
-          </button>
+          <WhatsAppActionButton
+            client={r.client || { id: r.clientId, name: r.clientName, phone: r.clientPhone }}
+            appointment={r}
+            template={MANUAL_WHATSAPP_TEMPLATES.find(t => t.key === 'appointment_reminder')}
+            size="icon"
+          />
         </div>
       ),
     },
@@ -580,7 +590,6 @@ export default function Appointments() {
             onDelete={(a) => setDeleteTarget(a)}
             onReschedule={(a) => { setRescheduleTarget(a); setSelectedAppt(null); }}
             onQr={(a) => { setQrTarget(a); setSelectedAppt(null); }}
-            onWhatsApp={(a) => navigate(`/whatsapp?client=${a.clientId || a.client?.id}`)}
             term={term}
           />
         </>

@@ -1,6 +1,9 @@
 const isLocalDev = ['127.0.0.1', 'localhost', '::1'].includes(self.location.hostname);
-const CACHE_NAME = 'the-smile-expert-v2';
-const APP_SHELL = ['/', '/login', '/dashboard', '/manifest.webmanifest', '/icon.svg'];
+const CACHE_NAME = 'patientflow-v3';
+const scopePath = new URL(self.registration.scope).pathname.replace(/\/$/, '');
+const basePath = scopePath === '' ? '' : scopePath;
+const shellPath = (path) => `${basePath}${path}`;
+const APP_SHELL = ['/', '/login', '/dashboard', '/manifest.webmanifest', '/icon.svg'].map(shellPath);
 
 if (isLocalDev) {
   self.addEventListener('install', (event) => {
@@ -38,7 +41,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).catch(() => caches.match('/')));
+    event.respondWith(fetch(event.request).catch(() => caches.match(shellPath('/'))));
     return;
   }
 

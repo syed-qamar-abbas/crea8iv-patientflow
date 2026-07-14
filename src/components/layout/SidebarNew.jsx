@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { canAccessPath, getCurrentRole, ROLE_LABELS } from '../../config/roles';
 import ClinicLogoMark from '../branding/ClinicLogoMark';
 
-const navGroups = [
+export const navGroups = [
   {
     label: 'Main Menu',
     items: [
@@ -46,6 +46,7 @@ const navGroups = [
     label: 'Growth',
     items: [
       { to: '/marketing', icon: Megaphone, label: 'Marketing' },
+      { to: '/outreach', icon: MessageCircle, label: 'Manual Outreach' },
       { to: '/whatsapp', icon: MessageCircle, label: 'WhatsApp Center' },
       { to: '/ai', icon: Bot, label: 'AI Hub' },
       { to: '/ai-receptionist', icon: Sparkles, label: 'AI Receptionist' },
@@ -65,7 +66,7 @@ const navGroups = [
   },
 ];
 
-const FEATURE_LOCKS = {
+export const FEATURE_LOCKS = {
   '/marketing': 'marketingEnabled',
   '/whatsapp': 'whatsappEnabled',
   '/ai': 'aiEnabled',
@@ -74,7 +75,7 @@ const FEATURE_LOCKS = {
   '/imports': 'importsEnabled',
 };
 
-const MODULE_KEYS = {
+export const MODULE_KEYS = {
   '/dashboard': 'dashboard',
   '/reception': 'reception',
   '/appointments': 'appointments',
@@ -90,6 +91,7 @@ const MODULE_KEYS = {
   '/gallery': 'gallery',
   '/feedback': 'feedback',
   '/marketing': 'marketing',
+  '/outreach': 'outreach',
   '/whatsapp': 'whatsapp',
   '/ai': 'ai',
   '/ai-receptionist': 'aiReceptionist',
@@ -104,6 +106,26 @@ const MODULE_KEYS = {
 
 const money = (value) => `PKR ${Number(value || 0).toLocaleString('en-US')}`;
 
+export function getEffectiveNavGroups(features, industryTemplate, role) {
+  const allNavItems = navGroups.flatMap(group => group.items);
+  const navigationGroups = (industryTemplate?.config?.navigation?.groups || []).map(group => ({
+    label: group.label,
+    items: (group.modules || []).map(moduleKey => allNavItems.find(item => MODULE_KEYS[item.to] === moduleKey)).filter(Boolean),
+  }));
+  const baseGroups = navigationGroups.length ? navigationGroups : navGroups;
+  return baseGroups.map(group => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (!canAccessPath(item.to, role)) return false;
+      const featureKey = FEATURE_LOCKS[item.to];
+      if (featureKey && !features?.[featureKey]) return false;
+      const templateModule = industryTemplate?.config?.modules?.[MODULE_KEYS[item.to]];
+      if (templateModule?.visible === false) return false;
+      return true;
+    }),
+  })).filter(group => group.items.length > 0);
+}
+
 export default function SidebarNew() {
   const { clinicInfo, features, industryTemplate } = useClinic();
   const [collapsed, setCollapsed] = useState(false);
@@ -116,12 +138,7 @@ export default function SidebarNew() {
     ? (packageInfo.annualPricePKR || packageInfo.pricePKR || 0)
     : (packageInfo.pricePKR || 0);
   const expiresAt = subscription?.expiresAt ? String(subscription.expiresAt).slice(0, 10) : '';
-  const allNavItems = navGroups.flatMap(group => group.items);
-  const navigationGroups = (industryTemplate.config.navigation?.groups || []).map(group => ({
-    label: group.label,
-    items: (group.modules || []).map(moduleKey => allNavItems.find(item => MODULE_KEYS[item.to] === moduleKey)).filter(Boolean),
-  }));
-  const effectiveNavGroups = navigationGroups.length ? navigationGroups : navGroups;
+  const effectiveNavGroups = getEffectiveNavGroups(features, industryTemplate, role);
 
   return (
     <aside
@@ -180,17 +197,7 @@ export default function SidebarNew() {
       {/* Navigation */}
       <nav className="relative z-10 flex-1 px-2 py-3 overflow-y-auto space-y-4">
         {effectiveNavGroups.map(group => {
-          // A module is visible only when the role can reach it AND, if it is a
-          // plan-gated feature, the clinic's plan includes it. Starter clinics
-          // never see AI / Marketing / WhatsApp / Meta Leads / Imports.
-          const visibleItems = group.items.filter((item) => {
-            if (!canAccessPath(item.to, role)) return false;
-            const featureKey = FEATURE_LOCKS[item.to];
-            if (featureKey && !features[featureKey]) return false;
-            const templateModule = industryTemplate.config.modules?.[MODULE_KEYS[item.to]];
-            if (templateModule?.visible === false) return false;
-            return true;
-          });
+          const visibleItems = group.items;
           if (visibleItems.length === 0) return null;
           return (
           <div key={group.label}>

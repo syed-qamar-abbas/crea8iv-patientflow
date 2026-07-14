@@ -520,6 +520,23 @@ CREATE TABLE `GalleryItem` (
   CONSTRAINT `FK_GalleryItem_Client` FOREIGN KEY (`clientId`) REFERENCES `Client` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Manual WhatsApp Outreach Log (Starter click-to-WhatsApp, no API sending)
+CREATE TABLE `ManualOutreachLog` (
+  `id` VARCHAR(36) NOT NULL,
+  `clinicId` VARCHAR(36) NOT NULL,
+  `clientId` VARCHAR(36) NOT NULL,
+  `appointmentId` VARCHAR(36) DEFAULT NULL,
+  `userId` VARCHAR(36) DEFAULT NULL,
+  `channel` VARCHAR(30) NOT NULL DEFAULT 'whatsapp',
+  `purpose` VARCHAR(80) NOT NULL DEFAULT 'custom',
+  `message` TEXT DEFAULT NULL,
+  `status` VARCHAR(30) NOT NULL DEFAULT 'opened',
+  `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `IX_ManualOutreach_Clinic_Created` (`clinicId`, `createdAt`),
+  KEY `IX_ManualOutreach_Client_Created` (`clinicId`, `clientId`, `createdAt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Campaign Table
 CREATE TABLE `Campaign` (
   `id` VARCHAR(36) NOT NULL,

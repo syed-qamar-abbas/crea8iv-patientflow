@@ -2,8 +2,8 @@
   "name": "The Smile Expert Portal",
   "short_name": "Smile Expert",
   "description": "Dental clinic portal for patients, appointments, billing, staff, and operations.",
-  "start_url": "/dashboard",
-  "scope": "/",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#f6f7f9",
@@ -11,7 +11,7 @@
   "categories": ["medical", "business", "productivity"],
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

@@ -38,6 +38,7 @@ import Inventory from './pages/Inventory';
 import Gallery from './pages/Gallery';
 import Feedback from './pages/Feedback';
 import Marketing from './pages/Marketing';
+import ManualOutreach from './pages/ManualOutreach';
 import WhatsAppCenter from './pages/WhatsAppCenter';
 import Reports from './pages/Reports';
 import AuditTrail from './pages/AuditTrail';
@@ -63,7 +64,7 @@ const MODULE_BY_PATH = {
   reception: 'reception', appointments: 'appointments', clients: 'clients', clinical: 'clinical',
   lab: 'lab', staff: 'staff', services: 'services', financials: 'financials', settings: 'settings',
   packages: 'packages', invoices: 'invoices', inventory: 'inventory', gallery: 'gallery', feedback: 'feedback',
-  marketing: 'marketing', whatsapp: 'whatsapp', reports: 'reports', audit: 'audit', branches: 'branches',
+  marketing: 'marketing', outreach: 'outreach', whatsapp: 'whatsapp', reports: 'reports', audit: 'audit', branches: 'branches',
   ai: 'ai', 'ai-receptionist': 'aiReceptionist', 'meta-leads': 'metaLeads', imports: 'imports', support: 'support',
 };
 
@@ -179,6 +180,7 @@ export default function AppNew() {
               <Route path="gallery" element={<RoleRoute path="gallery"><Gallery /></RoleRoute>} />
               <Route path="feedback" element={<RoleRoute path="feedback"><Feedback /></RoleRoute>} />
               <Route path="marketing" element={<FeatureRoute path="marketing"><Marketing /></FeatureRoute>} />
+              <Route path="outreach" element={<RoleRoute path="outreach"><ManualOutreach /></RoleRoute>} />
               <Route path="whatsapp" element={<FeatureRoute path="whatsapp"><WhatsAppCenter /></FeatureRoute>} />
               <Route path="reports" element={<RoleRoute path="reports"><Reports /></RoleRoute>} />
               <Route path="audit" element={<RoleRoute path="audit"><AuditTrail /></RoleRoute>} />

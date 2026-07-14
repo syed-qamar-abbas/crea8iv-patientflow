@@ -35,6 +35,7 @@ export const ROLE_ACCESS = {
     'gallery',
     'feedback',
     'marketing',
+    'outreach',
     'whatsapp',
     'ai',
     'ai-receptionist',
@@ -62,6 +63,7 @@ export const ROLE_ACCESS = {
     'gallery',
     'feedback',
     'marketing',
+    'outreach',
     'whatsapp',
     'ai',
     'ai-receptionist',
@@ -73,11 +75,11 @@ export const ROLE_ACCESS = {
     'support',
     'settings',
   ],
-  doctor: ['dashboard', 'clinical', 'lab', 'appointments', 'clients', 'gallery', 'feedback', 'inventory'],
-  therapist: ['dashboard', 'clinical', 'lab', 'appointments', 'clients', 'gallery', 'feedback', 'inventory'],
+  doctor: ['dashboard', 'clinical', 'lab', 'appointments', 'clients', 'gallery', 'feedback', 'inventory', 'outreach'],
+  therapist: ['dashboard', 'clinical', 'lab', 'appointments', 'clients', 'gallery', 'feedback', 'inventory', 'outreach'],
   accountant: ['dashboard', 'clients', 'financials', 'packages', 'invoices', 'reports'],
-  receptionist: ['dashboard', 'reception', 'appointments', 'clients', 'lab', 'invoices', 'packages', 'whatsapp', 'support'],
-  staff: ['dashboard', 'clinical', 'appointments', 'clients', 'gallery', 'feedback', 'inventory'],
+  receptionist: ['dashboard', 'reception', 'appointments', 'clients', 'lab', 'invoices', 'packages', 'outreach', 'whatsapp', 'support'],
+  staff: ['dashboard', 'clinical', 'appointments', 'clients', 'gallery', 'feedback', 'inventory', 'outreach'],
 };
 
 export function normalizeRole(role) {

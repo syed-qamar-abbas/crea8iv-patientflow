@@ -8,6 +8,8 @@ import { canViewBusinessFinancials } from '../config/roles';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
+import WhatsAppActionButton from '../components/outreach/WhatsAppActionButton';
+import { MANUAL_WHATSAPP_TEMPLATES } from '../utils/whatsapp';
 
 const tierColors = { Platinum: '#64748b', Gold: '#f59e0b', Silver: '#94a3b8', Bronze: '#f97316' };
 
@@ -180,6 +182,7 @@ function DeleteConfirmModal({ isOpen, onClose, onConfirm, name, deleting, term }
 }
 
 function ClientCard({ client, onClick, onEdit, onDelete }) {
+  const followUpTemplate = MANUAL_WHATSAPP_TEMPLATES.find(t => t.key === 'follow_up');
   return (
     <div
       onClick={() => onClick(client.id)}
@@ -227,6 +230,10 @@ function ClientCard({ client, onClick, onEdit, onDelete }) {
         {client.patientNo && <Badge label={client.patientNo} variant="active" />}
         {client.loyaltyTier && <Badge label={client.loyaltyTier} variant={client.loyaltyTier} />}
         {client.workflowStage && <Badge label={client.workflowStage.replaceAll('_', ' ')} variant="pending" />}
+      </div>
+
+      <div className="mb-3">
+        <WhatsAppActionButton client={client} template={followUpTemplate} className="w-full" />
       </div>
 
       <div className={`border-t border-gray-50 dark:border-white/10 pt-3 grid gap-2 ${canViewBusinessFinancials() ? 'grid-cols-3' : 'grid-cols-2'}`}>
@@ -461,6 +468,7 @@ export default function Clients() {
                   <td className="px-4 py-3.5">{client.status && <Badge label={client.status} variant={client.status} />}</td>
                   <td className="px-4 py-3.5">
                     <div className="flex gap-1">
+                      <WhatsAppActionButton client={client} template={MANUAL_WHATSAPP_TEMPLATES.find(t => t.key === 'follow_up')} size="icon" />
                       <button onClick={(e) => { e.stopPropagation(); setEditTarget(client); setShowAddModal(true); }}
                         className="p-1.5 rounded-lg hover:bg-indigo-50 dark:hover:bg-white/10 text-gray-400 hover:text-indigo-600">
                         <Pencil className="w-3.5 h-3.5" />

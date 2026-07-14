@@ -1,10 +1,12 @@
 import SidebarNew from './SidebarNew';
 import Header from './Header';
 import MobileQuickActions from './MobileQuickActions';
+import MobileNavigationDrawer from './MobileNavigationDrawer';
 import ImpersonationBanner from '../ImpersonationBanner';
-import { useEffect } from 'react';
+import InstallPrompt from '../pwa/InstallPrompt';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Calendar, ClipboardList, FileBarChart, LayoutDashboard, Receipt, Stethoscope, Users } from 'lucide-react';
+import { Calendar, LayoutDashboard, Menu, MessageCircle, Users } from 'lucide-react';
 import clsx from 'clsx';
 import { useTheme } from '../../context/ThemeContext';
 import { useClinic } from '../../context/ClinicContext';
@@ -12,12 +14,9 @@ import { canAccessPath, getCurrentRole } from '../../config/roles';
 
 const mobileNav = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Home' },
-  { to: '/reception', icon: ClipboardList, label: 'Desk' },
   { to: '/appointments', icon: Calendar, label: 'Appts' },
   { to: '/clients', icon: Users, label: 'Patients' },
-  { to: '/clinical', icon: Stethoscope, label: 'Operations' },
-  { to: '/invoices', icon: Receipt, label: 'Bills' },
-  { to: '/reports', icon: FileBarChart, label: 'Reports' },
+  { to: '/outreach', icon: MessageCircle, label: 'Outreach' },
 ];
 
 export default function LayoutNew() {
@@ -25,6 +24,7 @@ export default function LayoutNew() {
   const { term } = useClinic();
   const role = getCurrentRole();
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dynamicMobileNav = mobileNav.map(item => {
     if (item.to === '/appointments') return { ...item, label: term('appointments', 'Appts') };
     if (item.to === '/clients') return { ...item, label: term('patients', 'Patients') };
@@ -59,6 +59,7 @@ export default function LayoutNew() {
         <div className="hidden md:flex h-full">
           <SidebarNew />
         </div>
+        <MobileNavigationDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
         <div className="flex flex-col flex-1 min-w-0">
           <ImpersonationBanner />
           <Header />
@@ -66,6 +67,7 @@ export default function LayoutNew() {
             <Outlet />
           </main>
         </div>
+        <InstallPrompt />
         <MobileQuickActions />
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-white/50 dark:border-white/10 shadow-2xl px-2 py-2">
           <div className="flex items-center justify-around gap-1">
@@ -84,6 +86,14 @@ export default function LayoutNew() {
                 <span className="truncate w-full text-center">{label}</span>
               </NavLink>
             ))}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="flex-1 min-w-0 flex flex-col items-center justify-center gap-1 rounded-lg py-1.5 text-[9px] sm:text-[10px] font-semibold text-gray-500 dark:text-gray-400"
+            >
+              <Menu className="w-4 h-4 shrink-0" />
+              <span className="truncate w-full text-center">Menu</span>
+            </button>
           </div>
         </nav>
       </div>

@@ -30,7 +30,7 @@ function industry_template_v2_base() {
             ['key' => 'main', 'label' => 'Main Menu', 'modules' => ['dashboard', 'reception', 'appointments', 'clients', 'clinical', 'staff', 'services', 'financials']],
             ['key' => 'billing', 'label' => 'Billing & Packages', 'modules' => ['packages', 'invoices']],
             ['key' => 'operations', 'label' => 'Operations', 'modules' => ['lab', 'inventory', 'gallery', 'feedback']],
-            ['key' => 'growth', 'label' => 'Growth', 'modules' => ['marketing', 'whatsapp', 'ai', 'aiReceptionist', 'metaLeads', 'imports', 'reports', 'branches']],
+            ['key' => 'growth', 'label' => 'Growth', 'modules' => ['marketing', 'outreach', 'whatsapp', 'ai', 'aiReceptionist', 'metaLeads', 'imports', 'reports', 'branches']],
             ['key' => 'admin', 'label' => 'Admin', 'modules' => ['audit', 'support', 'settings']],
         ]],
         'scheduling' => [
@@ -73,6 +73,7 @@ function industry_template_v2_base() {
             'gallery' => ['label' => 'Private Media', 'desc' => 'Private operational documents and media', 'icon' => 'Image', 'visible' => true],
             'feedback' => ['label' => 'Feedback', 'desc' => 'Customer feedback and team performance', 'icon' => 'MessageSquare', 'visible' => true],
             'marketing' => ['label' => 'Marketing', 'desc' => 'Engagement and campaigns', 'icon' => 'Megaphone', 'visible' => true],
+            'outreach' => ['label' => 'Manual Outreach', 'desc' => 'Manual WhatsApp reminders, follow-ups and broadcast lists', 'icon' => 'MessageCircle', 'visible' => true],
             'whatsapp' => ['label' => 'WhatsApp Center', 'desc' => 'Conversations, reminders and campaigns', 'icon' => 'MessageCircle', 'visible' => true],
             'ai' => ['label' => 'AI Hub', 'desc' => 'AI provider configuration and failover', 'icon' => 'Bot', 'visible' => true],
             'aiReceptionist' => ['label' => 'AI Receptionist', 'desc' => 'AI front desk and intake workflows', 'icon' => 'Sparkles', 'visible' => true],

@@ -465,6 +465,10 @@ $routes = [
     ['POST', '^api/v1/gallery/([^/]+)$', 'GalleryController', 'upload', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
     ['DELETE', '^api/v1/gallery/([^/]+)$', 'GalleryController', 'remove', ['owner', 'manager', 'doctor', 'therapist']],
 
+    // Starter Manual Outreach Routes (click-to-WhatsApp, no WhatsApp API sending)
+    ['GET', '^api/v1/manual-outreach/logs$', 'ManualOutreachController', 'list', ['owner', 'manager', 'doctor', 'therapist', 'receptionist', 'staff']],
+    ['POST', '^api/v1/manual-outreach/logs$', 'ManualOutreachController', 'create', ['owner', 'manager', 'doctor', 'therapist', 'receptionist', 'staff']],
+
     // Branches Routes
     ['GET', '^api/v1/branches$', 'BranchController', 'list', ['owner', 'manager', 'doctor', 'therapist', 'receptionist', 'staff']],
     ['POST', '^api/v1/branches$', 'BranchController', 'create', ['owner', 'manager']],
