@@ -446,8 +446,26 @@ function pf_migration_try_mysql_alter_compatibility($db, $statement) {
     return true;
 }
 
+function pf_migration_statement_returns_rows($statement) {
+    $statement = pf_migration_strip_leading_comments($statement);
+    return preg_match('/^(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN|EXECUTE|CALL)\b/i', trim($statement)) === 1;
+}
+
+function pf_migration_exec_result_statement($db, $statement) {
+    $stmt = $db->query($statement);
+    if ($stmt !== false) {
+        $stmt->fetchAll();
+        $stmt->closeCursor();
+    }
+}
+
 function pf_migration_exec_statement($db, $statement) {
     if (pf_migration_try_mysql_alter_compatibility($db, $statement)) {
+        return;
+    }
+
+    if (pf_migration_statement_returns_rows($statement)) {
+        pf_migration_exec_result_statement($db, $statement);
         return;
     }
 

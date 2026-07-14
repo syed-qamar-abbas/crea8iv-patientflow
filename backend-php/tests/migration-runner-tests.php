@@ -51,7 +51,7 @@ echo "== migration runner ==\n";
 $db = DB::getConnection();
 $dir = migration_temp_dir();
 migration_write($dir, '2026-01-01-alpha.sqlite.sql', "CREATE TABLE Alpha (id TEXT PRIMARY KEY);\nINSERT INTO Alpha (id) VALUES ('a');\n");
-migration_write($dir, '2026-01-02-beta.sqlite.sql', "CREATE TABLE Beta (id TEXT PRIMARY KEY, note TEXT);\nINSERT INTO Beta (id, note) VALUES ('b', 'semi;colon');\n");
+migration_write($dir, '2026-01-02-beta.sqlite.sql', "CREATE TABLE Beta (id TEXT PRIMARY KEY, note TEXT);\nSELECT 1;\nINSERT INTO Beta (id, note) VALUES ('b', 'semi;colon');\n");
 migration_write($dir, '2026-01-03-ignore-mysql.sql', "CREATE TABLE ShouldNotRun (id TEXT PRIMARY KEY);\n");
 
 $status = pf_migration_status($db, $dir);
