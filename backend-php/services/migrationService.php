@@ -361,13 +361,17 @@ function pf_migration_parse_mysql_add_columns($statement) {
 function pf_migration_mysql_column_exists($db, $tableName, $columnName) {
     $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
     $stmt->execute([$tableName, $columnName]);
-    return (int)$stmt->fetchColumn() > 0;
+    $exists = (int)$stmt->fetchColumn() > 0;
+    $stmt->closeCursor();
+    return $exists;
 }
 
 function pf_migration_mysql_key_exists($db, $tableName, $keyName) {
     $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?");
     $stmt->execute([$tableName, $keyName]);
-    return (int)$stmt->fetchColumn() > 0;
+    $exists = (int)$stmt->fetchColumn() > 0;
+    $stmt->closeCursor();
+    return $exists;
 }
 
 function pf_migration_parse_mysql_add_key($statement) {
