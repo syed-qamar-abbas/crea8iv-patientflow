@@ -107,9 +107,9 @@ function AccountManagement() {
   const [formError, setFormError] = useState('');
 
   // Add form
-  const [addForm, setAddForm] = useState({ name: '', username: '', email: '', password: '', role: 'receptionist' });
+  const [addForm, setAddForm] = useState({ name: '', username: '', phone: '', whatsapp: '', email: '', password: '', role: 'receptionist' });
   // Edit form
-  const [editForm, setEditForm] = useState({ name: '', username: '', email: '', role: 'receptionist' });
+  const [editForm, setEditForm] = useState({ name: '', username: '', phone: '', whatsapp: '', email: '', role: 'receptionist' });
   // Reset form
   const [resetForm, setResetForm] = useState({ newPassword: '', confirm: '' });
   const [showResetPass, setShowResetPass] = useState(false);
@@ -132,7 +132,7 @@ function AccountManagement() {
   useEffect(() => { load(); }, [load]);
 
   const openEdit = (u) => {
-    setEditForm({ name: u.name || '', username: u.username || suggestUsername(u.email || u.name), email: u.email || '', role: u.role || 'receptionist' });
+    setEditForm({ name: u.name || '', username: u.username || suggestUsername(u.email || u.name), phone: u.phone || '', whatsapp: u.whatsapp || '', email: u.email || '', role: u.role || 'receptionist' });
     setFormError('');
     setEditUser(u);
   };
@@ -149,7 +149,7 @@ function AccountManagement() {
     try {
       await fetchApi('/users', { method: 'POST', body: JSON.stringify(addForm) });
       setAddOpen(false);
-      setAddForm({ name: '', username: '', email: '', password: '', role: 'receptionist' });
+      setAddForm({ name: '', username: '', phone: '', whatsapp: '', email: '', password: '', role: 'receptionist' });
       await load();
     } catch (err) {
       setFormError(err.message || 'Failed to create user');
@@ -221,7 +221,7 @@ function AccountManagement() {
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={() => { setAddForm({ name: '', username: '', email: '', password: '', role: 'receptionist' }); setFormError(''); setAddOpen(true); }}>
+        <Button size="sm" onClick={() => { setAddForm({ name: '', username: '', phone: '', whatsapp: '', email: '', password: '', role: 'receptionist' }); setFormError(''); setAddOpen(true); }}>
           <Plus className="w-4 h-4" /> Add User
         </Button>
       </div>
@@ -264,7 +264,11 @@ function AccountManagement() {
                     </td>
                     <td className="py-3 px-2 text-xs text-gray-500 dark:text-gray-400">
                       <span className="font-semibold text-gray-700 dark:text-gray-200">{u.username || 'Not set'}</span>
-                      {u.email && <span className="block text-[11px] text-gray-400">{u.email}</span>}
+                      {(u.phone || u.whatsapp || u.email) && (
+                        <span className="block text-[11px] text-gray-400">
+                          {[u.whatsapp || u.phone, u.email].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -320,9 +324,19 @@ function AccountManagement() {
               <p className={`mt-1 text-[11px] font-semibold ${addUsername.status === 'available' ? 'text-emerald-600' : addUsername.status === 'checking' ? 'text-gray-400' : 'text-rose-600'}`}>{addUsername.message}</p>
             )}
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Phone</label>
+              <input type="tel" value={addForm.phone} onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })} placeholder="+92..." className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">WhatsApp</label>
+              <input type="tel" value={addForm.whatsapp} onChange={(e) => setAddForm({ ...addForm, whatsapp: e.target.value })} placeholder="+92..." className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            </div>
+          </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Contact Email</label>
-            <input type="email" required value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Contact Email <span className="font-normal text-gray-400">(optional)</span></label>
+            <input type="email" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} placeholder="Optional recovery/contact email" className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Password</label>
@@ -363,9 +377,19 @@ function AccountManagement() {
               <p className={`mt-1 text-[11px] font-semibold ${editUsername.status === 'available' ? 'text-emerald-600' : editUsername.status === 'checking' ? 'text-gray-400' : 'text-rose-600'}`}>{editUsername.message}</p>
             )}
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Phone</label>
+              <input type="tel" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="+92..." className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">WhatsApp</label>
+              <input type="tel" value={editForm.whatsapp} onChange={(e) => setEditForm({ ...editForm, whatsapp: e.target.value })} placeholder="+92..." className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            </div>
+          </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Contact Email</label>
-            <input type="email" required value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Contact Email <span className="font-normal text-gray-400">(optional)</span></label>
+            <input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="Optional recovery/contact email" className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Role</label>

@@ -13,7 +13,7 @@ class UserController {
         }
         
         $db = DB::getConnection();
-        $stmt = $db->prepare("SELECT id, name, username, email, role, ledgerMode, isActive, lastLogin, createdAt FROM User WHERE clinicId = ? ORDER BY createdAt ASC");
+        $stmt = $db->prepare("SELECT id, name, username, email, phone, whatsapp, role, ledgerMode, isActive, lastLogin, createdAt FROM User WHERE clinicId = ? ORDER BY createdAt ASC");
         $stmt->execute([$user['clinicId']]);
         $users = $stmt->fetchAll();
         send_json($users);
@@ -27,19 +27,24 @@ class UserController {
         $name = $input['name'] ?? '';
         $usernameInput = $input['username'] ?? '';
         $email = $input['email'] ?? '';
+        $phone = trim($input['phone'] ?? '');
+        $whatsapp = trim($input['whatsapp'] ?? '');
         $password = $input['password'] ?? '';
         $role = $input['role'] ?? '';
         $ledgerMode = $input['ledgerMode'] ?? 'actual';
 
-        if (empty($name) || empty($usernameInput) || empty($email) || empty($password) || empty($role)) {
-            send_error('name, username, email, password, and role are required', 400);
+        if (empty($name) || empty($usernameInput) || empty($password) || empty($role)) {
+            send_error('name, username, password, and role are required', 400);
         }
         try {
             $username = pf_username_validate($usernameInput);
         } catch (InvalidArgumentException $e) {
             send_error($e->getMessage(), 400);
         }
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $normalizedEmail = strtolower(trim($email));
+        if ($normalizedEmail === '') {
+            $normalizedEmail = null;
+        } elseif (!filter_var($normalizedEmail, FILTER_VALIDATE_EMAIL)) {
             send_error('A valid contact email is required', 400);
         }
         if (strlen($password) < 10) {
@@ -51,29 +56,32 @@ class UserController {
         }
 
         $mode = in_array($ledgerMode, $this->allowedLedgerModes) ? $ledgerMode : 'actual';
-        $normalizedEmail = strtolower(trim($email));
 
         $db = DB::getConnection();
         if (!pf_username_available($db, $username)) {
             send_error('Username already registered', 409);
         }
-        $stmt = $db->prepare("SELECT id FROM User WHERE email = ?");
-        $stmt->execute([$normalizedEmail]);
-        if ($stmt->fetch()) {
-            send_error('Email already registered', 409);
+        if ($normalizedEmail !== null) {
+            $stmt = $db->prepare("SELECT id FROM User WHERE email = ?");
+            $stmt->execute([$normalizedEmail]);
+            if ($stmt->fetch()) {
+                send_error('Email already registered', 409);
+            }
         }
 
         $id = generate_uuid();
         $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
 
-        $stmt = $db->prepare("INSERT INTO User (id, clinicId, name, username, email, password, role, ledgerMode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$id, $user['clinicId'], $name, $username, $normalizedEmail, $hash, $role, $mode]);
+        $stmt = $db->prepare("INSERT INTO User (id, clinicId, name, username, email, phone, whatsapp, password, role, ledgerMode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$id, $user['clinicId'], $name, $username, $normalizedEmail, $phone ?: null, $whatsapp ?: null, $hash, $role, $mode]);
 
         send_json([
             'id' => $id,
             'name' => $name,
             'username' => $username,
             'email' => $normalizedEmail,
+            'phone' => $phone ?: null,
+            'whatsapp' => $whatsapp ?: null,
             'role' => $role,
             'ledgerMode' => $mode,
             'isActive' => true
@@ -117,15 +125,30 @@ class UserController {
         }
         if (isset($input['email'])) {
             $normalizedEmail = strtolower(trim($input['email']));
-            if ($normalizedEmail !== $existing['email']) {
-                $stmtCheck = $db->prepare("SELECT id FROM User WHERE email = ?");
-                $stmtCheck->execute([$normalizedEmail]);
-                if ($stmtCheck->fetch()) {
-                    send_error('Email already in use', 409);
+            if ($normalizedEmail === '') {
+                $normalizedEmail = null;
+            } elseif (!filter_var($normalizedEmail, FILTER_VALIDATE_EMAIL)) {
+                send_error('A valid contact email is required', 400);
+            }
+            if ($normalizedEmail !== ($existing['email'] ?? null)) {
+                if ($normalizedEmail !== null) {
+                    $stmtCheck = $db->prepare("SELECT id FROM User WHERE email = ? AND id != ?");
+                    $stmtCheck->execute([$normalizedEmail, $id]);
+                    if ($stmtCheck->fetch()) {
+                        send_error('Email already in use', 409);
+                    }
                 }
             }
             $fields[] = "email = ?";
             $params[] = $normalizedEmail;
+        }
+        if (isset($input['phone'])) {
+            $fields[] = "phone = ?";
+            $params[] = trim($input['phone']) ?: null;
+        }
+        if (isset($input['whatsapp'])) {
+            $fields[] = "whatsapp = ?";
+            $params[] = trim($input['whatsapp']) ?: null;
         }
         if (isset($input['role'])) {
             if (!in_array($input['role'], $this->allowedRoles)) {
@@ -158,7 +181,7 @@ class UserController {
         $stmt->execute($params);
 
         // Fetch updated user
-        $stmt = $db->prepare("SELECT id, name, username, email, role, ledgerMode, isActive FROM User WHERE id = ? AND clinicId = ?");
+        $stmt = $db->prepare("SELECT id, name, username, email, phone, whatsapp, role, ledgerMode, isActive FROM User WHERE id = ? AND clinicId = ?");
         $stmt->execute([$id, $user['clinicId']]);
         $updatedUser = $stmt->fetch();
 
