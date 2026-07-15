@@ -92,7 +92,7 @@ const defaultFeatures = {
   aiHumanApprovalRequired: true,
   monthlyAiTokenLimit: 0,
   monthlyWhatsAppLimit: 0,
-  package: { key: 'core', name: 'Starter', pricePKR: 25000, annualPricePKR: 150000 },
+  package: { key: 'core', name: 'Starter', pricePKR: 20000, annualPricePKR: 120000 },
   subscription: null,
 };
 

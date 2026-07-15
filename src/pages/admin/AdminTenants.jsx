@@ -72,6 +72,8 @@ const GROWTH_MODULES = [
   { key: 'importsEnabled', label: 'Imports', icon: Database },
 ];
 
+const money = (value) => `PKR ${Number(value || 0).toLocaleString('en-PK')}`;
+
 const prettyTemplate = (key = 'healthcare') => String(key || 'healthcare')
   .split('_')
   .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -188,7 +190,7 @@ export default function AdminTenants() {
   };
 
   const activate = (t) => {
-    const cycle = window.prompt('Billing cycle: type "monthly" (default PKR 25,000) or "annual" (Starter yearly offer PKR 150,000 upfront)', 'monthly');
+    const cycle = window.prompt('Billing cycle: type "monthly" (default PKR 20,000) or "annual" (Starter yearly offer PKR 120,000 upfront)', 'monthly');
     if (!cycle || !['monthly', 'annual'].includes(cycle)) return;
     run(t.id, () => fetchApi(`/admin/tenants/${t.id}/activate`, { method: 'POST', body: JSON.stringify({ billingCycle: cycle }) }));
   };
@@ -408,20 +410,24 @@ export default function AdminTenants() {
 
 // ----------------------------------------------------------------------
 // Slide-over detail panel: owner(s), domain/SSL, subscription, usage counts.
-function SubscriptionControls({ tenantId, status, currentExpiry, onChanged }) {
+function SubscriptionControls({ tenantId, status, currentSubscription, currentExpiry, onChanged }) {
   const toDateInput = (v) => {
     if (!v) return '';
     const d = new Date(String(v).replace(' ', 'T'));
     return isNaN(d) ? '' : d.toISOString().slice(0, 10);
   };
   const [date, setDate] = useState(toDateInput(currentExpiry));
-  const [cycle, setCycle] = useState('');
-  const [amount, setAmount] = useState('');
+  const [cycle, setCycle] = useState(currentSubscription?.billingCycle || 'monthly');
+  const [amount, setAmount] = useState(currentSubscription?.amountPKR ?? '');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
-  useEffect(() => { setDate(toDateInput(currentExpiry)); }, [currentExpiry]);
+  useEffect(() => {
+    setDate(toDateInput(currentExpiry));
+    setCycle(currentSubscription?.billingCycle || 'monthly');
+    setAmount(currentSubscription?.amountPKR ?? '');
+  }, [currentExpiry, currentSubscription?.billingCycle, currentSubscription?.amountPKR]);
 
   const daysLeft = currentExpiry ? Math.ceil((new Date(String(currentExpiry).replace(' ', 'T')) - new Date()) / 86400000) : null;
 
@@ -466,6 +472,21 @@ function SubscriptionControls({ tenantId, status, currentExpiry, onChanged }) {
         <p className="text-[10px] text-gray-400 mt-1">Sets the exact end date. Future date keeps the clinic active; a past date marks it expired.</p>
       </div>
 
+      <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-50 p-3 dark:bg-white/5">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">Billing cycle</label>
+          <select value={cycle} onChange={(e) => setCycle(e.target.value)} className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-900 dark:text-white rounded-lg px-2 py-1.5 text-xs">
+            <option value="monthly">Monthly</option>
+            <option value="annual">Annual</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">Clinic deal price</label>
+          <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount PKR" className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-900 dark:text-white rounded-lg px-2 py-1.5 text-xs" />
+        </div>
+        <p className="col-span-2 text-[10px] text-gray-400">This is the custom amount shown in the clinic portal and used for MRR. Example: set monthly to 15000 if you pitched a discount.</p>
+      </div>
+
       <div>
         <p className="text-[11px] font-semibold text-gray-500 mb-1">Quick extend from current end</p>
         <div className="flex flex-wrap gap-1.5">
@@ -474,18 +495,6 @@ function SubscriptionControls({ tenantId, status, currentExpiry, onChanged }) {
           ))}
         </div>
       </div>
-
-      <details className="text-xs">
-        <summary className="cursor-pointer text-gray-400 font-semibold select-none">Billing cycle & amount (optional)</summary>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <select value={cycle} onChange={(e) => setCycle(e.target.value)} className="border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-900 dark:text-white rounded-lg px-2 py-1.5 text-xs">
-            <option value="">Keep current cycle</option>
-            <option value="monthly">Monthly</option>
-            <option value="annual">Annual</option>
-          </select>
-          <input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount PKR" className="border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-900 dark:text-white rounded-lg px-2 py-1.5 text-xs" />
-        </div>
-      </details>
 
       {msg && <p className="text-[11px] text-emerald-600 font-semibold">{msg}</p>}
       {err && <p className="text-[11px] text-rose-600 font-semibold">{err}</p>}
@@ -505,7 +514,8 @@ function TenantDrawer({ id, onClose, onManage, onEdit, onChanged }) {
   }, [id]);
 
   const owner = data?.users?.find((u) => u.role === 'owner') || data?.users?.[0];
-  const expiry = data?.subscriptions?.find((s) => s.status === 'active')?.expiresAt;
+  const activeSubscription = data?.subscriptions?.find((s) => s.status === 'active');
+  const expiry = activeSubscription?.expiresAt;
 
   const Row = ({ label, children }) => (
     <div className="flex items-start justify-between gap-4 py-2 border-b border-gray-100 dark:border-white/5 last:border-0">
@@ -550,12 +560,14 @@ function TenantDrawer({ id, onClose, onManage, onEdit, onChanged }) {
               <Row label="Portal link">{data.slug ? <a href={`https://crea8ivmedia.com/clinic/${data.slug}`} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:underline break-all">crea8ivmedia.com/clinic/{data.slug}</a> : '—'}</Row>
               <Row label="Custom domain">{data.customDomain ? <>{data.customDomain}<span className="block text-xs text-gray-400">{data.domainStatus} · SSL {data.sslStatus || 'n/a'}</span></> : 'None (uses portal link)'}</Row>
               <Row label="Subscription">{expiry ? <span className="inline-flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-gray-400" /><ExpiryBadge date={expiry} status={data.status} /></span> : '—'}</Row>
+              <Row label="Billing">{activeSubscription ? <>{money(activeSubscription.amountPKR)}<span className="block text-xs capitalize text-gray-400">{activeSubscription.billingCycle}</span></> : '—'}</Row>
               <Row label="Created">{data.createdAt ? String(data.createdAt).slice(0, 10) : '—'}</Row>
             </section>
 
             <SubscriptionControls
               tenantId={data.id}
               status={data.status}
+              currentSubscription={activeSubscription}
               currentExpiry={expiry}
               onChanged={() => { loadDrawer(); onChanged?.(); }}
             />
@@ -629,6 +641,7 @@ function TenantAutomationControls({ tenantId }) {
           quietHoursEnd: res.whatsapp?.quietHoursEnd || '09:00',
         },
         platformAiProviders: (res.platformAiProviders || []).map((p) => ({ ...p, apiKey: '' })),
+        packagePricing: res.packagePricing || {},
       });
     }).catch((e) => setErr(e.message));
   }, [tenantId]);
@@ -638,6 +651,16 @@ function TenantAutomationControls({ tenantId }) {
   const setProvider = (idx, key, value) => setDraft((d) => ({
     ...d,
     platformAiProviders: d.platformAiProviders.map((p, i) => i === idx ? { ...p, [key]: value } : p),
+  }));
+  const setPackagePrice = (packageKey, fieldKey, value) => setDraft((d) => ({
+    ...d,
+    packagePricing: {
+      ...(d.packagePricing || {}),
+      [packageKey]: {
+        ...((d.packagePricing || {})[packageKey] || {}),
+        [fieldKey]: value,
+      },
+    },
   }));
 
   const save = async () => {
@@ -712,7 +735,7 @@ function TenantAutomationControls({ tenantId }) {
     <section className="rounded-xl border border-gray-200/70 p-4 dark:border-white/10">
       <div className="mb-4 rounded-xl border border-orange-200 bg-orange-50/60 dark:border-orange-500/30 dark:bg-orange-500/10 p-3">
         <p className="text-xs font-black uppercase tracking-wider text-orange-700 dark:text-orange-300">Subscription package</p>
-        <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">One active package — controls which modules this clinic sees &amp; uses.</p>
+        <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">One active package — controls which modules this clinic sees &amp; uses. Starter standard is PKR 20,000/mo or PKR 120,000/year.</p>
         <div className="flex flex-wrap gap-2">
           {(data.packages || []).map((p) => (
             <button
@@ -721,9 +744,32 @@ function TenantAutomationControls({ tenantId }) {
               disabled={saving}
               className={`rounded-lg px-3 py-1.5 text-xs font-bold border transition-colors disabled:opacity-60 ${data.package === p.key ? 'bg-orange-600 text-white border-orange-600' : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:border-orange-300 hover:text-orange-600'}`}
             >
-              {data.package === p.key ? '✓ ' : ''}{p.name} · PKR {Number(p.pricePKR).toLocaleString()}/mo
+              {data.package === p.key ? '✓ ' : ''}{p.name} · {money(p.pricePKR)}/mo
             </button>
           ))}
+        </div>
+      </div>
+      <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/5">
+        <p className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-300">Custom package pricing</p>
+        <p className="mb-3 text-[11px] text-gray-500 dark:text-gray-400">Use this when you pitch a clinic a custom rate. The active subscription amount still controls what the clinic portal shows after activation.</p>
+        <div className="grid gap-3">
+          {(data.packages || []).map((p) => {
+            const override = draft.packagePricing?.[p.key] || {};
+            return (
+              <div key={p.key} className="grid gap-2 rounded-xl border border-gray-200 bg-white p-3 dark:border-white/10 dark:bg-slate-900 sm:grid-cols-[1fr_120px_120px]">
+                <div>
+                  <p className="text-sm font-black text-gray-900 dark:text-white">{p.name}</p>
+                  <p className="text-[11px] text-gray-400">{p.tagline}</p>
+                </div>
+                <label className="text-[11px] font-semibold text-gray-500">Monthly PKR
+                  <input className={field} type="number" min="0" value={override.pricePKR ?? p.pricePKR ?? ''} onChange={(e) => setPackagePrice(p.key, 'pricePKR', e.target.value)} />
+                </label>
+                <label className="text-[11px] font-semibold text-gray-500">Annual PKR
+                  <input className={field} type="number" min="0" value={override.annualPricePKR ?? p.annualPricePKR ?? ''} onChange={(e) => setPackagePrice(p.key, 'annualPricePKR', e.target.value)} />
+                </label>
+              </div>
+            );
+          })}
         </div>
       </div>
       <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/5">

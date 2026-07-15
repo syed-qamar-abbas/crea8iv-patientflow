@@ -4,10 +4,11 @@ require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../services/mailService.php';
 require_once __DIR__ . '/../services/metaWhatsAppService.php';
 require_once __DIR__ . '/../services/tenantFeatureService.php';
+require_once __DIR__ . '/../services/packageService.php';
 require_once __DIR__ . '/../services/usernameService.php';
 
-const PLAN_MONTHLY_PKR = 25000;
-const PLAN_ANNUAL_PKR  = 150000; // Starter yearly offer: 50% off, billed fully in advance
+const PLAN_MONTHLY_PKR = 20000;
+const PLAN_ANNUAL_PKR  = 120000; // Starter yearly offer: 50% off, billed fully in advance
 
 class AdminController {
     private function ensureAiProviderSettings($db) {
@@ -398,7 +399,8 @@ class AdminController {
             'whatsapp' => $this->publicWhatsappSettings($whatsapp),
             'platformAiProviders' => $providers,
             'package' => pf_package_get($db, $id),
-            'packages' => array_values(pf_packages()),
+            'packages' => array_values(pf_packages_for_clinic($db, $id)),
+            'packagePricing' => pf_package_pricing_get($db, $id),
             'industryTemplates' => industry_templates_list($db),
             'industryTemplate' => industry_template_get($db, $features['industryTemplate'] ?? INDUSTRY_TEMPLATE_DEFAULT),
             'credentials' => $this->getOwnerCredential($db, $id),
@@ -509,6 +511,14 @@ class AdminController {
             }
         }
 
+        if (isset($input['packagePricing']) && is_array($input['packagePricing'])) {
+            try {
+                pf_package_pricing_save($db, $id, $input['packagePricing']);
+            } catch (Exception $e) {
+                send_error($e->getMessage(), 400);
+            }
+        }
+
         log_audit($id, $user['id'], 'tenant_automation_updated', 'ClinicFeatureSetting', $id, null, $features);
         $this->getTenantAutomation([], $user, $id);
     }
@@ -518,14 +528,17 @@ class AdminController {
         if (!in_array($billingCycle, ['monthly', 'annual'], true)) {
             send_error('billingCycle must be monthly or annual', 400);
         }
-        $amount = isset($input['amountPKR'])
-            ? (float)$input['amountPKR']
-            : ($billingCycle === 'annual' ? PLAN_ANNUAL_PKR : PLAN_MONTHLY_PKR);
-
         $db = DB::getConnection();
         $stmt = $db->prepare("SELECT id, status FROM Clinic WHERE id = ? AND id != 'platform'");
         $stmt->execute([$id]);
         if (!$stmt->fetch()) send_error('Tenant not found', 404);
+
+        $package = pf_package_for_clinic($db, $id);
+        $amount = isset($input['amountPKR'])
+            ? (float)$input['amountPKR']
+            : ($billingCycle === 'annual'
+                ? (float)($package['annualPricePKR'] ?? PLAN_ANNUAL_PKR)
+                : (float)($package['pricePKR'] ?? PLAN_MONTHLY_PKR));
 
         $startsAt = date('Y-m-d H:i:s');
         $expiresAt = date('Y-m-d H:i:s', strtotime($billingCycle === 'annual' ? '+12 months' : '+1 month'));
@@ -680,8 +693,12 @@ class AdminController {
             $subId = $sub['id'];
         } else {
             $subId = generate_uuid();
+            $package = pf_package_for_clinic($db, $id);
+            $defaultAmount = $billingCycle === 'annual'
+                ? (float)($package['annualPricePKR'] ?? PLAN_ANNUAL_PKR)
+                : (float)($package['pricePKR'] ?? PLAN_MONTHLY_PKR);
             $db->prepare("INSERT INTO Subscription (id, clinicId, billingCycle, amountPKR, startsAt, expiresAt, status) VALUES (?, ?, ?, ?, ?, ?, 'active')")
-               ->execute([$subId, $id, $billingCycle ?: 'monthly', $amount ?? (float)PLAN_MONTHLY_PKR, date('Y-m-d H:i:s'), $expiresAt]);
+               ->execute([$subId, $id, $billingCycle ?: 'monthly', $amount ?? $defaultAmount, date('Y-m-d H:i:s'), $expiresAt]);
         }
 
         // Status follows the date: future end = active, past = expired (keep suspended as-is otherwise).

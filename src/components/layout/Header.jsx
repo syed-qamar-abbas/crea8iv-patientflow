@@ -127,9 +127,11 @@ export default function Header() {
   const packageInfo = features.package || {};
   const planName = subscription?.packageName || packageInfo.name || 'Starter';
   const planCycle = subscription?.billingCycle || 'monthly';
-  const planAmount = planCycle === 'annual'
-    ? (packageInfo.annualPricePKR || packageInfo.pricePKR || 0)
-    : (packageInfo.pricePKR || 0);
+  const planAmount = subscription?.amountPKR ?? (
+    planCycle === 'annual'
+      ? (packageInfo.annualPricePKR || packageInfo.pricePKR || 0)
+      : (packageInfo.pricePKR || 0)
+  );
 
   const pathParts = location.pathname.split('/').filter(Boolean);
   const titleForPath = (path) => {

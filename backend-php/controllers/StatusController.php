@@ -21,7 +21,8 @@ class StatusController {
         $stmt->execute([$user['clinicId']]);
         $clinic = $stmt->fetch() ?: null;
         $packageKey = pf_package_get($db, $user['clinicId']);
-        $package = pf_packages()[$packageKey] ?? pf_packages()['core'];
+        $clinicPackages = pf_packages_for_clinic($db, $user['clinicId']);
+        $package = $clinicPackages[$packageKey] ?? $clinicPackages['core'];
         $stmt = $db->prepare("SELECT id, billingCycle, amountPKR, startsAt, expiresAt, status FROM Subscription WHERE clinicId = ? AND status = 'active' ORDER BY expiresAt DESC LIMIT 1");
         $stmt->execute([$user['clinicId']]);
         $subscription = $stmt->fetch() ?: null;

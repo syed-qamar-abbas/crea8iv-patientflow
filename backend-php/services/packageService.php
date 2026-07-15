@@ -48,8 +48,8 @@ function pf_packages() {
 
     return [
         'core' => [
-            'key' => 'core', 'name' => 'Starter', 'pricePKR' => 25000,
-            'annualPricePKR' => 150000,
+            'key' => 'core', 'name' => 'Starter', 'pricePKR' => 20000,
+            'annualPricePKR' => 120000,
             'annualNote' => '50% off when paid yearly in advance.',
             'tagline' => 'Everything to run the clinic day-to-day.',
             'flags' => $core,
@@ -78,6 +78,74 @@ function pf_ensure_platform_settings($db) {
 }
 
 function pf_package_storage_key($clinicId) { return 'clinic_package:' . $clinicId; }
+
+function pf_package_pricing_storage_key($clinicId) { return 'clinic_package_pricing:' . $clinicId; }
+
+function pf_package_apply_pricing_overrides($packages, $overrides) {
+    if (!is_array($overrides)) return $packages;
+    foreach ($overrides as $key => $pricing) {
+        if (!isset($packages[$key]) || !is_array($pricing)) continue;
+        foreach (['pricePKR', 'annualPricePKR'] as $field) {
+            if (array_key_exists($field, $pricing) && $pricing[$field] !== '' && $pricing[$field] !== null) {
+                $packages[$key][$field] = max(0, (float)$pricing[$field]);
+                $packages[$key]['customPricing'] = true;
+            }
+        }
+    }
+    return $packages;
+}
+
+function pf_package_pricing_get($db, $clinicId) {
+    pf_ensure_platform_settings($db);
+    try {
+        $stmt = $db->prepare("SELECT settingValue FROM PlatformSetting WHERE settingKey = ?");
+        $stmt->execute([pf_package_pricing_storage_key($clinicId)]);
+        $saved = $stmt->fetchColumn();
+        $decoded = $saved ? (json_decode($saved, true) ?: []) : [];
+        return is_array($decoded) ? $decoded : [];
+    } catch (Exception $e) {
+        return [];
+    }
+}
+
+function pf_packages_for_clinic($db, $clinicId) {
+    return pf_package_apply_pricing_overrides(pf_packages(), pf_package_pricing_get($db, $clinicId));
+}
+
+function pf_package_for_clinic($db, $clinicId, $key = null) {
+    $packages = pf_packages_for_clinic($db, $clinicId);
+    $key = $key ?: pf_package_get($db, $clinicId);
+    return $packages[$key] ?? $packages['core'];
+}
+
+function pf_package_pricing_save($db, $clinicId, $input) {
+    $packages = pf_packages();
+    $current = pf_package_pricing_get($db, $clinicId);
+    $next = is_array($current) ? $current : [];
+
+    foreach ($packages as $key => $package) {
+        if (!isset($input[$key]) || !is_array($input[$key])) continue;
+        foreach (['pricePKR', 'annualPricePKR'] as $field) {
+            if (!isset($next[$key])) $next[$key] = [];
+            $raw = $input[$key][$field] ?? null;
+            if ($raw === '' || $raw === null) {
+                unset($next[$key][$field]);
+            } else {
+                $amount = (float)$raw;
+                if ($amount < 0) throw new Exception('Package prices cannot be negative');
+                $next[$key][$field] = $amount;
+            }
+        }
+        if (empty($next[$key])) unset($next[$key]);
+    }
+
+    $json = json_encode($next);
+    $sql = DB_DRIVER === 'sqlite'
+        ? "INSERT INTO PlatformSetting (settingKey, settingValue) VALUES (?, ?) ON CONFLICT(settingKey) DO UPDATE SET settingValue=excluded.settingValue, updatedAt=CURRENT_TIMESTAMP"
+        : "INSERT INTO PlatformSetting (settingKey, settingValue) VALUES (?, ?) ON DUPLICATE KEY UPDATE settingValue=VALUES(settingValue), updatedAt=CURRENT_TIMESTAMP";
+    $db->prepare($sql)->execute([pf_package_pricing_storage_key($clinicId), $json]);
+    return $next;
+}
 
 // Current package for a clinic. Defaults to 'core' when never assigned —
 // i.e. existing clinics are Core unless a super admin changed them.
