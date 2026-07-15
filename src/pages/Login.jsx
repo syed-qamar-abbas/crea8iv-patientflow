@@ -64,7 +64,7 @@ export default function Login() {
       // hydrate tenant branding and plan features for the signed-in clinic.
       window.location.assign(appPath(data.user.role === 'superadmin' ? '/admin' : '/dashboard'));
     } catch (err) {
-      setError(err.message || 'Invalid username or password.');
+      setError(err.message || 'Invalid username/email or password.');
     } finally {
       setLoading(false);
     }
@@ -100,17 +100,20 @@ export default function Login() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                  Username
+                  Username or email
                 </label>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder={isPlatform ? 'superadmin' : 'frontdesk'}
+                  placeholder={isPlatform ? 'superadmin or admin@email.com' : 'frontdesk or owner@email.com'}
                   required
                   autoComplete="username"
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/40 focus:border-[var(--primary)]/40 transition-all"
                 />
+                <p className="mt-1.5 text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                  Existing users can continue with their old email. New users can use their assigned username.
+                </p>
               </div>
 
               <div>
