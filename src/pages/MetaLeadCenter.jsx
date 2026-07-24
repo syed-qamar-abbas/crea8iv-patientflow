@@ -14,35 +14,66 @@ export default function MetaLeadCenter() {
   const [showLead, setShowLead] = useState(false);
   const [editLead, setEditLead] = useState(null);
   const [leadForm, setLeadForm] = useState(emptyLead);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [error, setError] = useState('');
+  const [validationError, setValidationError] = useState('');
 
   const load = async () => {
     setLoading(true);
-    const [settingsData, leadRows] = await Promise.all([fetchApi('/meta/settings'), fetchApi('/meta/leads')]);
-    setSettings(settingsData);
-    setLeads(leadRows);
-    setLoading(false);
+    setError('');
+    try {
+      const [settingsData, leadRows] = await Promise.all([fetchApi('/meta/settings'), fetchApi('/meta/leads')]);
+      setSettings(settingsData);
+      setLeads(leadRows);
+    } catch (err) {
+      setError(err.message || 'Meta leads could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
-  useEffect(() => setLeadForm(editLead ? { ...emptyLead, ...editLead } : emptyLead), [editLead, showLead]);
+  useEffect(() => { setLeadForm(editLead ? { ...emptyLead, ...editLead } : emptyLead); setValidationError(''); }, [editLead, showLead]);
 
   const saveSettings = async () => {
-    const updated = await fetchApi('/meta/settings', { method: 'PUT', body: JSON.stringify(settings) });
-    setSettings(updated);
+    setError('');
+    try {
+      const updated = await fetchApi('/meta/settings', { method: 'PUT', body: JSON.stringify(settings) });
+      setSettings(updated);
+    } catch (err) {
+      setError(err.message || 'Meta settings could not be saved.');
+    }
   };
   const saveLead = async () => {
-    if (!leadForm.patientName.trim()) return alert('Patient name is required.');
-    if (editLead) await fetchApi(`/meta/leads/${editLead.id}`, { method: 'PUT', body: JSON.stringify(leadForm) });
-    else await fetchApi('/meta/leads', { method: 'POST', body: JSON.stringify(leadForm) });
-    setShowLead(false); setEditLead(null); await load();
+    setValidationError('');
+    setError('');
+    if (!leadForm.patientName.trim()) return setValidationError('Patient name is required.');
+    try {
+      if (editLead) await fetchApi(`/meta/leads/${editLead.id}`, { method: 'PUT', body: JSON.stringify(leadForm) });
+      else await fetchApi('/meta/leads', { method: 'POST', body: JSON.stringify(leadForm) });
+      setShowLead(false); setEditLead(null); await load();
+    } catch (err) {
+      setValidationError(err.message || 'Lead could not be saved.');
+    }
   };
-  const removeLead = async (lead) => {
-    if (!confirm(`Delete lead ${lead.patientName}?`)) return;
-    await fetchApi(`/meta/leads/${lead.id}`, { method: 'DELETE' });
-    await load();
+  const removeLead = async () => {
+    if (!deleteTarget) return;
+    setError('');
+    try {
+      await fetchApi(`/meta/leads/${deleteTarget.id}`, { method: 'DELETE' });
+      setDeleteTarget(null);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Lead could not be deleted.');
+    }
   };
   const convertLead = async (lead) => {
-    await fetchApi(`/meta/leads/${lead.id}/convert`, { method: 'POST', body: JSON.stringify({}) });
-    await load();
+    setError('');
+    try {
+      await fetchApi(`/meta/leads/${lead.id}/convert`, { method: 'POST', body: JSON.stringify({}) });
+      await load();
+    } catch (err) {
+      setError(err.message || 'Lead could not be converted.');
+    }
   };
 
   const metrics = useMemo(() => ({
@@ -59,6 +90,12 @@ export default function MetaLeadCenter() {
         <div><h1 className="text-xl font-bold text-gray-900 dark:text-white">Meta Lead Center</h1><p className="mt-1 text-sm text-gray-500">Facebook/Instagram lead capture, attribution, CRM conversion and WhatsApp workflow foundation.</p></div>
         <Button onClick={() => { setEditLead(null); setShowLead(true); }}><Plus className="h-4 w-4" /> Add Lead</Button>
       </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          {error}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         {[
@@ -85,7 +122,7 @@ export default function MetaLeadCenter() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50"><tr>{['Patient', 'Contact', 'Campaign', 'Ad/Form', 'Status', 'Actions'].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-gray-50">
-            {leads.map(lead => <tr key={lead.id}><td className="px-4 py-3 font-bold">{lead.patientName}</td><td className="px-4 py-3 text-xs">{lead.phone}<br />{lead.email}</td><td className="px-4 py-3 text-xs">{lead.campaignName || 'Manual'}</td><td className="px-4 py-3 text-xs">{lead.adName || '-'} / {lead.formName || '-'}</td><td className="px-4 py-3"><Badge label={lead.status} variant={lead.status === 'converted' ? 'active' : 'pending'} /></td><td className="px-4 py-3"><div className="flex gap-1"><button onClick={() => convertLead(lead)} disabled={lead.status === 'converted'} className="rounded-lg p-2 text-gray-400 hover:bg-teal-50 hover:text-teal-700 disabled:opacity-30"><UserPlus className="h-4 w-4" /></button><button onClick={() => { setEditLead(lead); setShowLead(true); }} className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600"><Edit2 className="h-4 w-4" /></button><button onClick={() => removeLead(lead)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}
+            {leads.map(lead => <tr key={lead.id}><td className="px-4 py-3 font-bold">{lead.patientName}</td><td className="px-4 py-3 text-xs">{lead.phone}<br />{lead.email}</td><td className="px-4 py-3 text-xs">{lead.campaignName || 'Manual'}</td><td className="px-4 py-3 text-xs">{lead.adName || '-'} / {lead.formName || '-'}</td><td className="px-4 py-3"><Badge label={lead.status} variant={lead.status === 'converted' ? 'active' : 'pending'} /></td><td className="px-4 py-3"><div className="flex gap-1"><button onClick={() => convertLead(lead)} disabled={lead.status === 'converted'} className="rounded-lg p-2 text-gray-400 hover:bg-teal-50 hover:text-teal-700 disabled:opacity-30"><UserPlus className="h-4 w-4" /></button><button onClick={() => { setEditLead(lead); setShowLead(true); }} className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600"><Edit2 className="h-4 w-4" /></button><button onClick={() => setDeleteTarget(lead)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}
             {leads.length === 0 && <tr><td colSpan={6} className="py-12 text-center text-sm text-gray-400">No Meta leads yet.</td></tr>}
           </tbody>
         </table>
@@ -93,11 +130,21 @@ export default function MetaLeadCenter() {
 
       <Modal isOpen={showLead} onClose={() => { setShowLead(false); setEditLead(null); }} title={editLead ? 'Edit Lead' : 'Add Meta Lead'} size="lg">
         <div className="space-y-4">
+          {validationError && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">{validationError}</div>}
           <div className="grid gap-3 sm:grid-cols-2"><input className="premium-input rounded-lg px-3 py-2 text-sm" placeholder="Patient name" value={leadForm.patientName} onChange={e => setLeadForm({ ...leadForm, patientName: e.target.value })} /><input className="premium-input rounded-lg px-3 py-2 text-sm" placeholder="Phone" value={leadForm.phone || ''} onChange={e => setLeadForm({ ...leadForm, phone: e.target.value })} /></div>
           <div className="grid gap-3 sm:grid-cols-2"><input className="premium-input rounded-lg px-3 py-2 text-sm" placeholder="Email" value={leadForm.email || ''} onChange={e => setLeadForm({ ...leadForm, email: e.target.value })} /><select className="premium-input rounded-lg px-3 py-2 text-sm" value={leadForm.status} onChange={e => setLeadForm({ ...leadForm, status: e.target.value })}><option>new</option><option>contacted</option><option>booked</option><option>converted</option><option>lost</option></select></div>
           <div className="grid gap-3 sm:grid-cols-3"><input className="premium-input rounded-lg px-3 py-2 text-sm" placeholder="Campaign" value={leadForm.campaignName || ''} onChange={e => setLeadForm({ ...leadForm, campaignName: e.target.value })} /><input className="premium-input rounded-lg px-3 py-2 text-sm" placeholder="Ad name" value={leadForm.adName || ''} onChange={e => setLeadForm({ ...leadForm, adName: e.target.value })} /><input className="premium-input rounded-lg px-3 py-2 text-sm" placeholder="Form name" value={leadForm.formName || ''} onChange={e => setLeadForm({ ...leadForm, formName: e.target.value })} /></div>
           <textarea className="premium-input w-full rounded-lg px-3 py-2 text-sm" rows={3} placeholder="Notes" value={leadForm.notes || ''} onChange={e => setLeadForm({ ...leadForm, notes: e.target.value })} />
           <div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setShowLead(false)}>Cancel</Button><Button onClick={saveLead}>Save Lead</Button></div>
+        </div>
+      </Modal>
+      <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Meta Lead" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">Delete lead {deleteTarget?.patientName || ''}? This cannot be undone.</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Keep Lead</Button>
+            <Button variant="danger" onClick={removeLead}>Delete Lead</Button>
+          </div>
         </div>
       </Modal>
     </div>

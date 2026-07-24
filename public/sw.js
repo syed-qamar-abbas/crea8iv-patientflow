@@ -1,9 +1,9 @@
 const isLocalDev = ['127.0.0.1', 'localhost', '::1'].includes(self.location.hostname);
-const CACHE_NAME = 'patientflow-v4-20260715';
+const CACHE_NAME = 'patientflow-v5-20260724';
 const scopePath = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 const basePath = scopePath === '' ? '' : scopePath;
 const shellPath = (path) => `${basePath}${path}`;
-const APP_SHELL = ['/', '/login', '/dashboard', '/manifest.webmanifest', '/icon.svg'].map(shellPath);
+const APP_SHELL = ['/', '/login', '/dashboard', '/manifest.webmanifest', '/crea8iv.png'].map(shellPath);
 
 if (isLocalDev) {
   self.addEventListener('install', (event) => {

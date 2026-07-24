@@ -27,6 +27,7 @@ const emptyForm = {
 function ItemFormModal({ isOpen, onClose, onSave, target, saving }) {
   const isEdit = !!target;
   const [form, setForm] = useState(emptyForm);
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     if (target) {
@@ -44,12 +45,17 @@ function ItemFormModal({ isOpen, onClose, onSave, target, saving }) {
     } else {
       setForm(emptyForm);
     }
+    setValidationError('');
   }, [target, isOpen]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const submit = () => {
-    if (!form.name.trim()) { alert('Item name is required.'); return; }
+    if (!form.name.trim()) {
+      setValidationError('Item name is required.');
+      return;
+    }
+    setValidationError('');
     onSave({
       ...form,
       quantity: Number(form.quantity || 0),
@@ -73,21 +79,28 @@ function ItemFormModal({ isOpen, onClose, onSave, target, saving }) {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Inventory Item' : 'Add Inventory Item'} size="lg">
-      <div className="grid grid-cols-2 gap-4">
-        {fields.map(field => (
-          <div key={field.key} className={field.colSpan === 2 ? 'col-span-2' : ''}>
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">{field.label}</label>
-            <input type={field.type} placeholder={field.placeholder}
-              className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              value={form[field.key]} onChange={e => set(field.key, e.target.value)} />
+      <div className="space-y-4">
+        {validationError && (
+          <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            {validationError}
           </div>
-        ))}
-      </div>
-      <div className="flex justify-end gap-3 mt-6">
-        <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button variant="primary" onClick={submit} disabled={saving}>
-          <Save className="w-4 h-4" /> {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Item'}
-        </Button>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          {fields.map(field => (
+            <div key={field.key} className={field.colSpan === 2 ? 'col-span-2' : ''}>
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">{field.label}</label>
+              <input type={field.type} placeholder={field.placeholder}
+                className="w-full border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                value={form[field.key]} onChange={e => set(field.key, e.target.value)} />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={saving}>
+            <Save className="w-4 h-4" /> {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Item'}
+          </Button>
+        </div>
       </div>
     </Modal>
   );
@@ -180,6 +193,7 @@ export default function Inventory() {
   const [adjustItem, setAdjustItem] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
 
   const loadItems = async () => {
     try {
@@ -196,6 +210,7 @@ export default function Inventory() {
 
   const handleSave = async (formData) => {
     setSaving(true);
+    setError('');
     try {
       if (editTarget) {
         await fetchApi(`/inventory/${editTarget.id}`, { method: 'PUT', body: JSON.stringify(formData) });
@@ -206,7 +221,7 @@ export default function Inventory() {
       setEditTarget(null);
       await loadItems();
     } catch (err) {
-      alert(`Save failed: ${err.message}`);
+      setError(`Save failed: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -215,13 +230,14 @@ export default function Inventory() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    setError('');
     try {
       // Backend has no DELETE; soft-delete via isActive flag
       await fetchApi(`/inventory/${deleteTarget.id}`, { method: 'PUT', body: JSON.stringify({ isActive: false }) });
       setDeleteTarget(null);
       await loadItems();
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      setError(`Delete failed: ${err.message}`);
     } finally {
       setDeleting(false);
     }
@@ -230,12 +246,13 @@ export default function Inventory() {
   const handleAdjust = async (payload) => {
     if (!adjustItem) return;
     setSaving(true);
+    setError('');
     try {
       await fetchApi(`/inventory/${adjustItem.id}/stock`, { method: 'POST', body: JSON.stringify(payload) });
       setAdjustItem(null);
       await loadItems();
     } catch (err) {
-      alert(`Adjustment failed: ${err.message}`);
+      setError(`Adjustment failed: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -266,6 +283,12 @@ export default function Inventory() {
           <Plus className="w-4 h-4" /> Add Item
         </Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         {[

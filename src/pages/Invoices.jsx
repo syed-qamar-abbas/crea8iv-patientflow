@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { CheckCircle, Download, Edit2, Eye, Loader2, MessageCircle, Plus, Receipt, RefreshCcw, Search, Trash2, Undo2, UserRound } from 'lucide-react';
 import { API_URL, fetchApi, peekApiCacheByPrefix } from '../config/api';
 import { TableSkeleton, CardGridSkeleton } from '../components/ui/Skeleton';
@@ -48,44 +49,103 @@ const totalsFromForm = (form, selectedClient, editing = false) => {
   return { subtotal, discountAmt, taxAmt, total, previousBalance, grandTotal, balanceDue };
 };
 
-function InvoiceFormModal({ isOpen, onClose, onSave, invoice, clients, services, appointments, saving, onPatientSelected }) {
+function InvoiceFormModal({ isOpen, onClose, onSave, invoice, prefill, clients, services, appointments, saving, onPatientSelected }) {
   const { term } = useClinic();
   const [form, setForm] = useState(emptyInvoice);
+  const [validationError, setValidationError] = useState('');
   const patientLabel = term('patient', 'Patient');
   const appointmentLabel = term('appointment', 'Appointment');
   const serviceLabel = term('service', 'Service');
   const visitLabel = term('visit', 'Visit');
 
-  useEffect(() => {
-    if (!invoice) {
-      setForm(emptyInvoice);
-      return;
-    }
-    setForm({
-      clientId: invoice.clientId || '',
-      appointmentId: invoice.appointmentId || '',
-      items: normalizeItems(invoice.items),
-      // The stored discount is an amount — load it directly in amount mode.
-      discountMode: 'amount',
-      discount: Number(invoice.discount || 0),
-      amountPaid: Number(invoice.amountPaid || 0),
-      paymentMethod: invoice.paymentMethod || 'Cash',
-      notes: invoice.notes || '',
-      dueDate: invoice.dueDate || '',
-      previousBalance: Number(invoice.previousBalance || 0),
-      procedureCost: invoice.procedureCost != null ? String(invoice.procedureCost) : '',
-    });
-  }, [invoice, isOpen]);
+  // Tracks whether the current line items were auto-derived from the linked
+  // appointment (vs. typed by the user). Only auto-derived / still-blank items
+  // get overwritten when the appointment changes — manual edits are never lost.
+  const [itemsAutoFilled, setItemsAutoFilled] = useState(false);
+
+  const prefillKey = [
+    prefill?.clientId || '',
+    prefill?.appointmentId || '',
+    prefill?.clientLabel || '',
+  ].join(':');
 
   const selectedClient = clients.find(client => client.id === form.clientId);
   const selectedAppointment = appointments.find(appt => appt.id === form.appointmentId);
+  // Only offer the selected patient's own appointments so you don't scan the
+  // whole clinic's list — and can't accidentally link someone else's visit.
+  // Most recent first so the newest visit is the natural default.
+  const patientAppointments = (form.clientId
+    ? appointments.filter(appt => appt.clientId === form.clientId)
+    : appointments).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const totals = totalsFromForm(form, selectedClient, Boolean(invoice));
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
-  const updateItem = (idx, key, value) => setForm(current => ({ ...current, items: current.items.map((item, i) => i === idx ? { ...item, [key]: value } : item) }));
-  const addItem = () => setForm(current => ({ ...current, items: [...current.items, emptyItem] }));
-  const removeItem = (idx) => setForm(current => ({ ...current, items: current.items.filter((_, i) => i !== idx) }));
+  const updateItem = (idx, key, value) => { setItemsAutoFilled(false); setForm(current => ({ ...current, items: current.items.map((item, i) => i === idx ? { ...item, [key]: value } : item) })); };
+  const addItem = () => { setItemsAutoFilled(false); setForm(current => ({ ...current, items: [...current.items, emptyItem] })); };
+  const removeItem = (idx) => { setItemsAutoFilled(false); setForm(current => ({ ...current, items: current.items.filter((_, i) => i !== idx) })); };
+
+  // A single blank starter row (or nothing) is safe to overwrite with appointment data.
+  const itemsAreBlank = (items) => !items || items.length === 0 || (items.length === 1 && !items[0]?.description && !Number(items[0]?.unitPrice));
+  const itemFromAppt = (appt) => ({
+    description: appt?.service?.name || appt?.serviceName || appt?.otherTreatment || '',
+    qty: 1,
+    unitPrice: Number(appt?.price || 0),
+    serviceId: appt?.serviceId || '',
+  });
+
+  useEffect(() => {
+    setValidationError('');
+    setItemsAutoFilled(false);
+    if (invoice) {
+      setForm({
+        clientId: invoice.clientId || '',
+        appointmentId: invoice.appointmentId || '',
+        items: normalizeItems(invoice.items),
+        // The stored discount is an amount — load it directly in amount mode.
+        discountMode: 'amount',
+        discount: Number(invoice.discount || 0),
+        amountPaid: Number(invoice.amountPaid || 0),
+        paymentMethod: invoice.paymentMethod || 'Cash',
+        notes: invoice.notes || '',
+        dueDate: invoice.dueDate || '',
+        previousBalance: Number(invoice.previousBalance || 0),
+        procedureCost: invoice.procedureCost != null ? String(invoice.procedureCost) : '',
+      });
+      return;
+    }
+
+    const appointment = prefill?.appointmentId
+      ? appointments.find(appt => appt.id === prefill.appointmentId)
+      : null;
+    const item = appointment ? itemFromAppt(appointment) : null;
+    const shouldFillItem = item && (item.description || Number(item.unitPrice) > 0);
+    const clientId = prefill?.clientId || appointment?.clientId || appointment?.client?.id || '';
+
+    setForm({
+      ...emptyInvoice,
+      clientId,
+      appointmentId: prefill?.appointmentId || '',
+      items: shouldFillItem ? [item] : [emptyItem],
+    });
+    if (shouldFillItem) setItemsAutoFilled(true);
+  }, [invoice, isOpen, prefillKey, appointments]);
+
+  // Linking an appointment prefills its treatment + price as a line item, so you
+  // don't re-pick the same service by hand. Skips overwrite if you've typed items.
+  const chooseAppointment = (apptId) => {
+    const appt = appointments.find(a => a.id === apptId);
+    const apptItem = appt ? itemFromAppt(appt) : null;
+    const willFill = !!(apptItem && (apptItem.description || Number(apptItem.unitPrice) > 0)) && (itemsAutoFilled || itemsAreBlank(form.items));
+    setForm(current => ({
+      ...current,
+      appointmentId: apptId,
+      clientId: appt?.clientId || appt?.client?.id || current.clientId,
+      items: willFill ? [apptItem] : current.items,
+    }));
+    if (willFill) setItemsAutoFilled(true);
+  };
 
   const selectService = (idx, serviceId) => {
+    setItemsAutoFilled(false);
     const service = services.find(row => row.id === serviceId);
     if (!service) return updateItem(idx, 'description', '');
     setForm(current => ({
@@ -95,9 +155,10 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, clients, services,
   };
 
   const submit = () => {
-    if (!form.clientId) return alert(`${patientLabel} is required.`);
+    setValidationError('');
+    if (!form.clientId) return setValidationError(`${patientLabel} is required.`);
     const items = normalizeItems(form.items).filter(item => item.description && item.unitPrice >= 0);
-    if (!items.length) return alert('At least one invoice item is required.');
+    if (!items.length) return setValidationError('At least one invoice item is required.');
     // Backend expects a discount PERCENTAGE (0-100). Converting the resolved
     // discount amount back to a percentage is exact: subtotal * (amt/subtotal*100)/100 === amt.
     const discountPercent = totals.subtotal > 0 ? (totals.discountAmt / totals.subtotal) * 100 : 0;
@@ -119,28 +180,50 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, clients, services,
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={invoice ? `Edit ${invoice.invoiceNo}` : 'New Invoice'} size="xl">
       <div className="space-y-5">
+        {validationError && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+            {validationError}
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+          <label className="text-xs font-semibold text-gray-700 dark:text-gray-200" data-training="invoice-patient-field">
             {patientLabel}
             <div className="mt-1">
               <PatientSearchSelect
                 value={form.clientId}
                 onChange={(id, patient) => {
-                  set('clientId', id);
                   if (patient) onPatientSelected?.(patient);
+                  // Auto-link the patient's most recent appointment (new invoices
+                  // only) and prefill its treatment, so a typical single-visit bill
+                  // needs no extra clicks. Edit mode keeps the saved linkage.
+                  const recent = !invoice
+                    ? appointments.filter(a => a.clientId === id).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0]
+                    : null;
+                  const recentItem = recent ? itemFromAppt(recent) : null;
+                  const willFill = !!(recentItem && (recentItem.description || Number(recentItem.unitPrice) > 0)) && (itemsAutoFilled || itemsAreBlank(form.items));
+                  setForm(current => ({
+                    ...current,
+                    clientId: id,
+                    appointmentId: recent ? recent.id : (invoice ? current.appointmentId : ''),
+                    items: willFill ? [recentItem] : current.items,
+                  }));
+                  if (willFill) setItemsAutoFilled(true);
                 }}
-                initialLabel={invoice?.client?.name || ''}
+                initialLabel={invoice?.client?.name || prefill?.clientLabel || selectedClient?.name || ''}
                 fallbackClients={clients}
                 inputClassName="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
               />
             </div>
           </label>
-          <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+          <label className="text-xs font-semibold text-gray-700 dark:text-gray-200" data-training="invoice-appointment-field">
             {appointmentLabel}
-            <select className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" value={form.appointmentId} onChange={e => set('appointmentId', e.target.value)}>
+            <select className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" value={form.appointmentId} onChange={e => chooseAppointment(e.target.value)}>
               <option value="">No {appointmentLabel.toLowerCase()} link</option>
-              {appointments.map(appt => <option key={appt.id} value={appt.id}>{appt.date} · {appt.client?.name || appt.clientName || patientLabel} · {appt.service?.name || appt.serviceName || serviceLabel}</option>)}
+              {patientAppointments.map(appt => <option key={appt.id} value={appt.id}>{appt.date} · {appt.service?.name || appt.serviceName || serviceLabel}</option>)}
             </select>
+            {form.clientId && patientAppointments.length === 0 && (
+              <span className="mt-1 block text-[10px] font-medium text-gray-400">No recent {appointmentLabel.toLowerCase()}s for this {patientLabel.toLowerCase()} — leave unlinked for a dues payment.</span>
+            )}
           </label>
         </div>
 
@@ -205,7 +288,7 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, clients, services,
 
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} disabled={saving}>{saving && <Loader2 className="h-4 w-4 animate-spin" />}{invoice ? 'Save Invoice' : 'Create Invoice'}</Button>
+          <Button onClick={submit} disabled={saving} data-training="invoice-save-button">{saving && <Loader2 className="h-4 w-4 animate-spin" />}{invoice ? 'Save Invoice' : 'Create Invoice'}</Button>
         </div>
       </div>
     </Modal>
@@ -215,11 +298,13 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, clients, services,
 function InvoiceDetailModal({ invoice, isOpen, onClose, onMarkPaid, onRefund, onDownload, onPrint, canAdminInvoice }) {
   const { clinicInfo, term } = useClinic();
   const patientLabel = term('patient', 'Patient');
+  const [notice, setNotice] = useState('');
+  useEffect(() => setNotice(''), [invoice?.id]);
   if (!invoice) return null;
   const invoiceClinic = { ...clinicInfo, ...(invoice.clinic || {}) };
   const sendWhatsapp = () => {
     const phone = (invoice.client?.phone || '').replace(/\D/g, '');
-    if (!phone) return alert(`No WhatsApp number found for this ${patientLabel.toLowerCase()}.`);
+    if (!phone) return setNotice(`No WhatsApp number found for this ${patientLabel.toLowerCase()}.`);
     const message = `Hi ${invoice.client?.name || patientLabel}, your invoice ${invoice.invoiceNo} from ${invoiceClinic.name} is ${money(invoice.grandTotal)}. Paid: ${money(invoice.amountPaid)}. Balance: ${money(invoice.balanceDue)}.`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
@@ -227,6 +312,11 @@ function InvoiceDetailModal({ invoice, isOpen, onClose, onMarkPaid, onRefund, on
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Invoice Detail" size="lg">
       <div className="space-y-6 printable-invoice">
+        {notice && (
+          <div className="no-print rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+            {notice}
+          </div>
+        )}
         <div className="flex items-start justify-between">
           <div>
             <ClinicLogoMark logo={invoiceClinic.logo} alt={`${invoiceClinic.name} logo`} className="mb-2 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl" textClassName="text-white font-bold text-sm" style={{ background: invoiceClinic.primaryColor || 'var(--primary)' }} />
@@ -298,7 +388,56 @@ function InvoiceDetailModal({ invoice, isOpen, onClose, onMarkPaid, onRefund, on
   );
 }
 
+function InvoiceActionConfirmModal({ invoice, action, patientLabel, onClose, onConfirm }) {
+  if (!invoice || !action) return null;
+  const isRefund = action === 'refund';
+  const title = isRefund ? `Refund ${invoice.invoiceNo}` : `Cancel ${invoice.invoiceNo}`;
+  const tone = isRefund ? 'amber' : 'red';
+  return (
+    <Modal isOpen={!!invoice && !!action} onClose={onClose} title={title} size="sm">
+      <div className="space-y-4">
+        <div className={`rounded-xl border px-4 py-3 ${
+          tone === 'amber'
+            ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100'
+            : 'border-red-200 bg-red-50 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100'
+        }`}>
+          <p className="text-sm font-bold">
+            {isRefund ? 'Confirm refund' : 'Confirm invoice cancellation'}
+          </p>
+          <p className="mt-1 text-xs leading-5">
+            {isRefund
+              ? 'This will mark the paid invoice as refunded and refresh balances.'
+              : `This will mark the invoice as Cancelled and keep it on record. ${patientLabel} balances will be recalculated.`}
+          </p>
+        </div>
+        <div className="rounded-xl bg-gray-50 p-3 text-xs dark:bg-white/5">
+          <div className="flex justify-between gap-3">
+            <span className="text-gray-500">Invoice</span>
+            <span className="font-bold text-gray-900 dark:text-white">{invoice.invoiceNo}</span>
+          </div>
+          <div className="mt-1 flex justify-between gap-3">
+            <span className="text-gray-500">{patientLabel}</span>
+            <span className="font-bold text-gray-900 dark:text-white">{invoice.client?.name || 'Unknown'}</span>
+          </div>
+          <div className="mt-1 flex justify-between gap-3">
+            <span className="text-gray-500">Grand total</span>
+            <span className="font-bold text-gray-900 dark:text-white">{money(invoice.grandTotal)}</span>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Keep Invoice</Button>
+          <Button variant={isRefund ? 'secondary' : 'danger'} onClick={() => onConfirm(invoice)}>
+            {isRefund ? 'Refund Invoice' : 'Cancel Invoice'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Invoices() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const receptionist = isReceptionist();
   const canSeeAggregateFinancials = canViewBusinessFinancials();
   const canAdminInvoice = canManageInvoiceAdmin();
@@ -320,8 +459,44 @@ export default function Invoices() {
   const [sort, setSort] = useState('date_desc'); // default: newest invoice date first
   const [showForm, setShowForm] = useState(false);
   const [editInvoice, setEditInvoice] = useState(null);
+  const [invoicePrefill, setInvoicePrefill] = useState(null);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [confirmInvoice, setConfirmInvoice] = useState(null);
+  const [error, setError] = useState('');
   const page = pagination.page;
+
+  function rememberPatient(patient) {
+    if (!patient?.id) return;
+    setClients(current => current.some(row => row.id === patient.id) ? current : [patient, ...current]);
+  }
+
+  useEffect(() => {
+    const statePrefill = location.state?.invoicePrefill || null;
+    const params = new URLSearchParams(location.search);
+    const queryPrefill = {
+      clientId: params.get('clientId') || '',
+      appointmentId: params.get('appointmentId') || '',
+      clientLabel: params.get('clientName') || '',
+      source: 'query',
+    };
+    const hasQueryPrefill = queryPrefill.clientId || queryPrefill.appointmentId;
+    const nextPrefill = statePrefill || (hasQueryPrefill ? queryPrefill : null);
+    if (!nextPrefill) return;
+
+    setInvoicePrefill(nextPrefill);
+    if (nextPrefill.clientId && nextPrefill.clientLabel) {
+      rememberPatient({
+        id: nextPrefill.clientId,
+        name: nextPrefill.clientLabel,
+        phone: nextPrefill.clientPhone || '',
+        patientNo: nextPrefill.patientNo || '',
+      });
+    }
+    setEditInvoice(null);
+    setShowForm(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.key, location.pathname, location.search, location.state, navigate]);
 
   const loadData = async ({ showSpinner = true } = {}) => {
     const params = new URLSearchParams({
@@ -341,6 +516,7 @@ export default function Invoices() {
     const dateRange = `from=${from.toISOString().slice(0, 10)}&to=${to.toISOString().slice(0, 10)}`;
 
     if (showSpinner) setLoading(true);
+    setError('');
     try {
       const [invoiceRows, clientRows, serviceRows, appointmentRows] = await Promise.all([
         fetchApi(`/invoices?${params.toString()}`),
@@ -364,7 +540,7 @@ export default function Invoices() {
       setServices(serviceRows);
       setAppointments(appointmentRows);
     } catch (err) {
-      alert(err.message || 'Invoices could not be loaded.');
+      setError(err.message || 'Invoices could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -389,13 +565,9 @@ export default function Invoices() {
     setPagination(current => ({ ...current, page: Math.min(Math.max(1, nextPage), current.pages || 1) }));
   };
 
-  const rememberPatient = (patient) => {
-    if (!patient?.id) return;
-    setClients(current => current.some(row => row.id === patient.id) ? current : [patient, ...current]);
-  };
-
   const saveInvoice = async (payload) => {
     setSaving(true);
+    setError('');
     try {
       if (editInvoice) {
         await fetchApi(`/invoices/${editInvoice.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -404,42 +576,48 @@ export default function Invoices() {
       }
       setShowForm(false);
       setEditInvoice(null);
+      setInvoicePrefill(null);
       await loadData();
     } catch (err) {
-      alert(err.message || 'Invoice could not be saved.');
+      setError(err.message || 'Invoice could not be saved.');
     } finally {
       setSaving(false);
     }
   };
 
   const markPaid = async (invoice) => {
+    setError('');
     try {
       await fetchApi(`/invoices/${invoice.id}/paid`, { method: 'PUT', body: JSON.stringify({ paymentMethod: invoice.paymentMethod || 'Cash' }) });
       setSelectedInvoice(null);
       await loadData();
     } catch (err) {
-      alert(err.message || 'Invoice could not be marked paid.');
+      setError(err.message || 'Invoice could not be marked paid.');
     }
   };
 
   const refundInvoice = async (invoice) => {
-    if (!confirm(`Refund ${invoice.invoiceNo}?`)) return;
+    setError('');
     try {
       await fetchApi(`/invoices/${invoice.id}/refund`, { method: 'PUT', body: JSON.stringify({}) });
+      setConfirmAction(null);
+      setConfirmInvoice(null);
       setSelectedInvoice(null);
       await loadData();
     } catch (err) {
-      alert(err.message || 'Invoice could not be refunded.');
+      setError(err.message || 'Invoice could not be refunded.');
     }
   };
 
   const deleteInvoice = async (invoice) => {
-    if (!confirm(`Delete invoice ${invoice.invoiceNo}? ${patientLabel} balances will be recalculated.`)) return;
+    setError('');
     try {
       await fetchApi(`/invoices/${invoice.id}`, { method: 'DELETE' });
+      setConfirmAction(null);
+      setConfirmInvoice(null);
       await loadData();
     } catch (err) {
-      alert(err.message || 'Invoice could not be deleted.');
+      setError(err.message || 'Invoice could not be cancelled.');
     }
   };
 
@@ -469,7 +647,7 @@ export default function Invoices() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (err) {
-      alert(err.message || 'PDF could not be downloaded.');
+      setError(err.message || 'PDF could not be downloaded.');
     }
   };
 
@@ -482,7 +660,7 @@ export default function Invoices() {
       if (w) { w.addEventListener('load', () => { try { w.print(); } catch (_) {} }); }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (err) {
-      alert(err.message || 'PDF could not be opened.');
+      setError(err.message || 'PDF could not be opened.');
     }
   };
 
@@ -495,9 +673,15 @@ export default function Invoices() {
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={loadData}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
-          <Button onClick={() => { setEditInvoice(null); setShowForm(true); }}><Plus className="h-4 w-4" /> New Invoice</Button>
+          <Button onClick={() => { setEditInvoice(null); setInvoicePrefill(null); setShowForm(true); }} data-training="invoices-new-button"><Plus className="h-4 w-4" /> New Invoice</Button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          {error}
+        </div>
+      )}
 
       {canSeeAggregateFinancials && (
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
@@ -541,7 +725,7 @@ export default function Invoices() {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900">
+      <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900" data-training="invoice-list">
         {loading && filtered.length === 0 ? (
           <div className="p-2"><TableSkeleton rows={8} cols={9} /></div>
         ) : filtered.length === 0 ? (
@@ -564,10 +748,10 @@ export default function Invoices() {
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1">
                         <button onClick={() => setSelectedInvoice(inv)} className="rounded-lg p-1.5 text-gray-400 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]" title="View"><Eye className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => { setEditInvoice(inv); setShowForm(true); }} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => { setEditInvoice(inv); setInvoicePrefill(null); setShowForm(true); }} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
                         {inv.status !== 'paid' && inv.status !== 'refunded' && <button onClick={() => markPaid(inv)} className="rounded-lg p-1.5 text-gray-400 hover:bg-green-50 hover:text-green-600" title="Mark paid"><CheckCircle className="h-3.5 w-3.5" /></button>}
                         <button onClick={() => downloadPdf(inv)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="PDF"><Download className="h-3.5 w-3.5" /></button>
-                        {canAdminInvoice && <button onClick={() => deleteInvoice(inv)} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600" title="Archive"><Trash2 className="h-3.5 w-3.5" /></button>}
+                        {canAdminInvoice && inv.status !== 'cancelled' && <button onClick={() => { setConfirmInvoice(inv); setConfirmAction('cancel'); }} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600" title="Cancel invoice"><Trash2 className="h-3.5 w-3.5" /></button>}
                       </div>
                     </td>
                   </tr>
@@ -590,8 +774,15 @@ export default function Invoices() {
         </div>
       )}
 
-      <InvoiceFormModal isOpen={showForm} onClose={() => { setShowForm(false); setEditInvoice(null); }} onSave={saveInvoice} invoice={editInvoice} clients={clients} services={services} appointments={appointments} saving={saving} onPatientSelected={rememberPatient} />
-      <InvoiceDetailModal invoice={selectedInvoice} isOpen={!!selectedInvoice} onClose={() => setSelectedInvoice(null)} onMarkPaid={markPaid} onRefund={refundInvoice} onDownload={downloadPdf} onPrint={printPdf} canAdminInvoice={canAdminInvoice} />
+      <InvoiceFormModal isOpen={showForm} onClose={() => { setShowForm(false); setEditInvoice(null); setInvoicePrefill(null); }} onSave={saveInvoice} invoice={editInvoice} prefill={invoicePrefill} clients={clients} services={services} appointments={appointments} saving={saving} onPatientSelected={rememberPatient} />
+      <InvoiceDetailModal invoice={selectedInvoice} isOpen={!!selectedInvoice} onClose={() => setSelectedInvoice(null)} onMarkPaid={markPaid} onRefund={(invoice) => { setConfirmInvoice(invoice); setConfirmAction('refund'); }} onDownload={downloadPdf} onPrint={printPdf} canAdminInvoice={canAdminInvoice} />
+      <InvoiceActionConfirmModal
+        invoice={confirmInvoice}
+        action={confirmAction}
+        patientLabel={patientLabel}
+        onClose={() => { setConfirmInvoice(null); setConfirmAction(null); }}
+        onConfirm={confirmAction === 'refund' ? refundInvoice : deleteInvoice}
+      />
     </div>
   );
 }

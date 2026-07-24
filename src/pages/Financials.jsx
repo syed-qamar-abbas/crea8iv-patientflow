@@ -6,6 +6,7 @@ import {
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
 import { fetchApi, API_URL, peekApiCacheByPrefix } from '../config/api';
 import { TableSkeleton, CardGridSkeleton } from '../components/ui/Skeleton';
 import { useClinic } from '../context/ClinicContext';
@@ -42,6 +43,85 @@ function EmptyState({ icon: Icon = FileText, title, body }) {
   );
 }
 
+function RenameCategoryModal({ category, value, onValueChange, onClose, onConfirm, saving }) {
+  return (
+    <Modal isOpen={!!category} onClose={onClose} title="Rename Category" size="sm">
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          Rename <span className="font-bold text-gray-900 dark:text-white">{category?.name}</span> for future expense entry.
+        </p>
+        <label className="block">
+          <span className="mb-1 block text-xs font-bold text-gray-600 dark:text-gray-300">Category name</span>
+          <input
+            value={value}
+            onChange={e => onValueChange(e.target.value)}
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-white"
+            autoFocus
+          />
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={onConfirm} disabled={saving || !value.trim() || value.trim() === category?.name}>
+            <Save className="h-4 w-4" /> Rename
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DeleteCategoryModal({ category, onClose, onConfirm, saving }) {
+  return (
+    <Modal isOpen={!!category} onClose={onClose} title="Delete Category" size="sm">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+          <p className="text-sm font-bold">Existing expenses are preserved.</p>
+          <p className="mt-1 text-xs leading-5">
+            This removes <span className="font-bold">{category?.name}</span> from the category picker. Existing expense records keep their saved category label.
+          </p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Keep Category</Button>
+          <Button variant="danger" onClick={onConfirm} disabled={saving}>
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DeleteExpenseModal({ expense, onClose, onConfirm, saving }) {
+  return (
+    <Modal isOpen={!!expense} onClose={onClose} title="Delete Expense" size="sm">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100">
+          <p className="text-sm font-bold">Remove this expense from reports?</p>
+          <p className="mt-1 text-xs leading-5">
+            The audit history is retained, but this expense will no longer appear in finance reports.
+          </p>
+        </div>
+        <div className="rounded-xl bg-gray-50 p-3 text-xs dark:bg-white/5">
+          <div className="flex justify-between gap-3">
+            <span className="text-gray-500">Expense</span>
+            <span className="font-bold text-gray-900 dark:text-white">{expense?.description}</span>
+          </div>
+          <div className="mt-1 flex justify-between gap-3">
+            <span className="text-gray-500">Amount</span>
+            <span className="font-bold text-rose-600">{money(expense?.amount)}</span>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Keep Expense</Button>
+          <Button variant="danger" onClick={onConfirm} disabled={saving}>
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Financials() {
   const { term } = useClinic();
   const serviceLabel = term('service', 'Service');
@@ -60,6 +140,10 @@ export default function Financials() {
   const [editingExpenseId, setEditingExpenseId] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [editingCats, setEditingCats] = useState(false);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
+  const [deleteExpenseTarget, setDeleteExpenseTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -173,29 +257,42 @@ export default function Financials() {
     setError('');
   };
 
-  const renameCategory = async (cat) => {
-    const name = window.prompt('Rename category', cat.name);
-    if (name === null) return;
-    const trimmed = name.trim();
-    if (!trimmed || trimmed === cat.name) return;
+  const openRenameCategory = (cat) => {
+    setRenameTarget(cat);
+    setRenameValue(cat.name || '');
+  };
+
+  const renameCategory = async () => {
+    if (!renameTarget) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === renameTarget.name) return;
+    setSaving(true);
     setError('');
     try {
-      const updated = await fetchApi(`/expenses/categories/${cat.id}`, { method: 'PUT', body: JSON.stringify({ name: trimmed }) });
-      setCategories(current => current.map(c => (c.id === cat.id ? updated : c)).sort((a, b) => a.name.localeCompare(b.name)));
+      const updated = await fetchApi(`/expenses/categories/${renameTarget.id}`, { method: 'PUT', body: JSON.stringify({ name: trimmed }) });
+      setCategories(current => current.map(c => (c.id === renameTarget.id ? updated : c)).sort((a, b) => a.name.localeCompare(b.name)));
+      setRenameTarget(null);
+      setRenameValue('');
     } catch (err) {
       setError(err.message || 'Category could not be renamed.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const deleteCategory = async (cat) => {
-    if (!window.confirm(`Delete category "${cat.name}"? Existing expenses keep their records.`)) return;
+  const deleteCategory = async () => {
+    if (!deleteCategoryTarget) return;
+    setSaving(true);
     setError('');
     try {
-      await fetchApi(`/expenses/categories/${cat.id}`, { method: 'DELETE' });
-      setCategories(current => current.filter(c => c.id !== cat.id));
-      setExpenseForm(current => (String(current.categoryId) === String(cat.id) ? { ...current, categoryId: '' } : current));
+      await fetchApi(`/expenses/categories/${deleteCategoryTarget.id}`, { method: 'DELETE' });
+      setCategories(current => current.filter(c => c.id !== deleteCategoryTarget.id));
+      setExpenseForm(current => (String(current.categoryId) === String(deleteCategoryTarget.id) ? { ...current, categoryId: '' } : current));
+      setDeleteCategoryTarget(null);
     } catch (err) {
       setError(err.message || 'Category could not be deleted.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -215,13 +312,14 @@ export default function Financials() {
     }
   };
 
-  const deleteExpense = async (expense) => {
-    if (!window.confirm(`Delete expense "${expense.description}"? It will be removed from reports but retained in audit history.`)) return;
+  const deleteExpense = async () => {
+    if (!deleteExpenseTarget) return;
     setSaving(true);
     setError('');
     try {
-      await fetchApi(`/expenses/${expense.id}`, { method: 'DELETE' });
-      if (editingExpenseId === expense.id) cancelExpenseEdit();
+      await fetchApi(`/expenses/${deleteExpenseTarget.id}`, { method: 'DELETE' });
+      if (editingExpenseId === deleteExpenseTarget.id) cancelExpenseEdit();
+      setDeleteExpenseTarget(null);
       await load();
     } catch (err) {
       setError(err.message || 'Expense could not be deleted.');
@@ -322,7 +420,7 @@ export default function Financials() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div id="expense-editor" className="scroll-mt-6 rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
+        <div id="expense-editor" data-training="financials-expense-editor" className="scroll-mt-6 rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-gray-950 dark:text-white">{editingExpenseId ? 'Edit Expense' : 'Add Expense'}</h2>
@@ -353,8 +451,8 @@ export default function Financials() {
                   {categories.map(cat => (
                     editingCats ? (
                       <span key={cat.id} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 py-1 pl-3 pr-1.5 text-xs font-bold text-gray-600 dark:border-white/10 dark:text-gray-300">
-                        <button type="button" onClick={() => renameCategory(cat)} title="Rename category" className="hover:text-[var(--primary)]">{cat.name}</button>
-                        <button type="button" onClick={() => deleteCategory(cat)} title="Delete category"
+                        <button type="button" onClick={() => openRenameCategory(cat)} title="Rename category" className="hover:text-[var(--primary)]">{cat.name}</button>
+                        <button type="button" onClick={() => setDeleteCategoryTarget(cat)} title="Delete category"
                           className="flex h-4 w-4 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600 dark:bg-white/10">×</button>
                       </span>
                     ) : (
@@ -410,7 +508,7 @@ export default function Financials() {
                     <td className="py-3 text-right">
                       <div className="inline-flex items-center gap-1">
                         <button type="button" onClick={() => startEditExpense(expense)} disabled={saving} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-gray-500 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 dark:hover:bg-indigo-500/10"><Pencil className="h-3.5 w-3.5" /> Edit</button>
-                        <button type="button" onClick={() => deleteExpense(expense)} disabled={saving} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-gray-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 dark:hover:bg-rose-500/10"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                        <button type="button" onClick={() => setDeleteExpenseTarget(expense)} disabled={saving} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-gray-500 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 dark:hover:bg-rose-500/10"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
                       </div>
                     </td>
                   </tr>
@@ -423,7 +521,7 @@ export default function Financials() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900" data-training="financials-profitability">
           <h2 className="text-sm font-bold text-gray-950 dark:text-white">Procedure Cost Tracking</h2>
           <p className="mt-1 text-xs text-gray-400">Record internal costs per invoice item. Only authorized roles can view this section.</p>
           <select value={selectedInvoiceId} onChange={e => setSelectedInvoiceId(e.target.value)} className="mt-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900">
@@ -499,6 +597,26 @@ export default function Financials() {
           </div>
         </div>
       </div>
+      <RenameCategoryModal
+        category={renameTarget}
+        value={renameValue}
+        onValueChange={setRenameValue}
+        onClose={() => { setRenameTarget(null); setRenameValue(''); }}
+        onConfirm={renameCategory}
+        saving={saving}
+      />
+      <DeleteCategoryModal
+        category={deleteCategoryTarget}
+        onClose={() => setDeleteCategoryTarget(null)}
+        onConfirm={deleteCategory}
+        saving={saving}
+      />
+      <DeleteExpenseModal
+        expense={deleteExpenseTarget}
+        onClose={() => setDeleteExpenseTarget(null)}
+        onConfirm={deleteExpense}
+        saving={saving}
+      />
     </div>
   );
 }

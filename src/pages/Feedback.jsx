@@ -29,6 +29,7 @@ function FeedbackModal({ isOpen, onClose, onSave, feedback, clients, staff, appo
   const appointmentLabel = term('appointment', 'Appointment');
   const serviceLabel = term('service', 'Service');
   const [form, setForm] = useState(emptyForm);
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     setForm(feedback ? {
@@ -42,14 +43,16 @@ function FeedbackModal({ isOpen, onClose, onSave, feedback, clients, staff, appo
       wouldRecommend: Boolean(Number(feedback.wouldRecommend ?? 1)),
       isPublic: Boolean(Number(feedback.isPublic ?? 1)),
     } : emptyForm);
+    setValidationError('');
   }, [feedback, isOpen]);
 
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
   const submit = () => {
     if (!form.clientId) {
-      alert(`${patientLabel} is required.`);
+      setValidationError(`${patientLabel} is required.`);
       return;
     }
+    setValidationError('');
     onSave({
       ...form,
       appointmentId: form.appointmentId || null,
@@ -63,6 +66,11 @@ function FeedbackModal({ isOpen, onClose, onSave, feedback, clients, staff, appo
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={feedback ? 'Edit Feedback' : 'Add Feedback'} size="lg">
       <div className="space-y-4">
+        {validationError && (
+          <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            {validationError}
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">
             {patientLabel}
@@ -139,9 +147,12 @@ export default function Feedback() {
   const [ratingFilter, setRatingFilter] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [editFeedback, setEditFeedback] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [error, setError] = useState('');
 
   const loadData = async () => {
     setLoading(true);
+    setError('');
     try {
       const [fb, sum, clientRows, staffRows, apptRows] = await Promise.all([
         fetchApi('/feedback'),
@@ -156,7 +167,7 @@ export default function Feedback() {
       setStaff(staffRows);
       setAppointments(apptRows);
     } catch (err) {
-      alert(err.message || 'Feedback data could not be loaded.');
+      setError(err.message || 'Feedback data could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -178,6 +189,7 @@ export default function Feedback() {
 
   const saveFeedback = async (payload) => {
     setSaving(true);
+    setError('');
     try {
       if (editFeedback) {
         await fetchApi(`/feedback/${editFeedback.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -188,19 +200,21 @@ export default function Feedback() {
       setEditFeedback(null);
       await loadData();
     } catch (err) {
-      alert(err.message || 'Feedback could not be saved.');
+      setError(err.message || 'Feedback could not be saved.');
     } finally {
       setSaving(false);
     }
   };
 
-  const deleteFeedback = async (row) => {
-    if (!confirm('Delete this feedback?')) return;
+  const deleteFeedback = async () => {
+    if (!deleteTarget) return;
+    setError('');
     try {
-      await fetchApi(`/feedback/${row.id}`, { method: 'DELETE' });
+      await fetchApi(`/feedback/${deleteTarget.id}`, { method: 'DELETE' });
+      setDeleteTarget(null);
       await loadData();
     } catch (err) {
-      alert(err.message || 'Feedback could not be deleted.');
+      setError(err.message || 'Feedback could not be deleted.');
     }
   };
 
@@ -213,6 +227,12 @@ export default function Feedback() {
         </div>
         <Button onClick={() => { setEditFeedback(null); setShowForm(true); }}><Plus className="h-4 w-4" /> Add Feedback</Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {[
@@ -269,7 +289,7 @@ export default function Feedback() {
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         <Badge label={row.isPublic ? 'public' : 'private'} variant={row.isPublic ? 'active' : 'inactive'} />
                         <button onClick={() => { setEditFeedback(row); setShowForm(true); }} className="rounded-lg p-2 text-gray-400 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]"><Edit2 className="h-4 w-4" /></button>
-                        <button onClick={() => deleteFeedback(row)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => setDeleteTarget(row)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </div>
                     <div className="mb-3 flex flex-wrap gap-4 rounded-xl bg-gray-50 p-3 dark:bg-white/5">
@@ -331,6 +351,18 @@ export default function Feedback() {
       </div>
 
       <FeedbackModal isOpen={showForm} onClose={() => { setShowForm(false); setEditFeedback(null); }} onSave={saveFeedback} feedback={editFeedback} clients={clients} staff={staff} appointments={appointments} saving={saving} />
+      <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Feedback" size="sm">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100">
+            <p className="text-sm font-bold">Delete this feedback?</p>
+            <p className="mt-1 text-xs leading-5">This review will be removed from feedback reporting and public display.</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="danger" onClick={deleteFeedback}><Trash2 className="h-4 w-4" /> Delete</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

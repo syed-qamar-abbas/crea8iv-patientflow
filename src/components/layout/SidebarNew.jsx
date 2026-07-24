@@ -214,6 +214,7 @@ export default function SidebarNew() {
                   <NavLink
                     key={to}
                     to={to}
+                    data-training={`nav-${MODULE_KEYS[to]}`}
                     className={({ isActive }) =>
                       clsx(
                         'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',

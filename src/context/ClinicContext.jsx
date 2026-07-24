@@ -52,7 +52,7 @@ const ClinicContext = createContext(null);
 const defaultClinicInfo = {
   name: 'Crea8iv PatientFlow',
   tagline: 'Clinic Management Platform',
-  logo: 'PF',
+  logo: '/crea8iv.png',
   address: 'Crea8iv Media, Islamabad, Pakistan',
   phone: '+92 310 5704555',
   whatsapp: '+92 310 5704555',

@@ -20,6 +20,7 @@ export default function Reports() {
   const servicesLabel = term('services', 'Services');
   const [data, setData] = useState({ financials: {}, invoices: [], appointments: [], staff: [], services: [] });
   const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -72,9 +73,15 @@ export default function Reports() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm"><Printer className="h-4 w-4" /> Print</Button>
-          <Button size="sm" onClick={() => alert('Live CSV export can be added as the next reporting task.')}><Download className="h-4 w-4" /> Export CSV</Button>
+          <Button size="sm" onClick={() => setNotice('Live CSV export can be added as the next reporting task.')}><Download className="h-4 w-4" /> Export CSV</Button>
         </div>
       </div>
+
+      {notice && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+          {notice}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[

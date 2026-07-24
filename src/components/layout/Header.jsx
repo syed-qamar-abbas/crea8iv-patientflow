@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Moon,
   PackageCheck,
+  GraduationCap,
   Search,
   Settings,
   ShieldAlert,
@@ -25,6 +26,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { getCurrentRole, getCurrentUser, ROLE_LABELS } from '../../config/roles';
 import { appPath, fetchApi } from '../../config/api';
 import WhatsNew from './WhatsNew';
+import { useTraining } from '../../context/TrainingContext';
 
 const pageTitles = {
   '/dashboard': 'Dashboard',
@@ -112,6 +114,7 @@ const money = (value) => `PKR ${Number(value || 0).toLocaleString('en-US')}`;
 export default function Header() {
   const { clinicInfo, features, industryTemplate } = useClinic();
   const { darkMode, toggleDark } = useTheme();
+  const { openTrainingCenter } = useTraining();
   const location = useLocation();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -243,6 +246,19 @@ export default function Header() {
 
         {/* What's New (feature updates for owners/managers) */}
         <WhatsNew />
+
+        {/* Training center */}
+        <button
+          type="button"
+          onClick={() => { openTrainingCenter(); setShowNotifications(false); setShowUserMenu(false); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/70 dark:bg-white/5 border border-gray-200/60 dark:border-white/10 text-gray-500 dark:text-gray-300 hover:bg-white dark:hover:bg-white/10 transition-all duration-200 shadow-sm"
+          title="Training Center"
+          aria-label="Open Training Center"
+          data-training="training-help-button"
+        >
+          <GraduationCap className="w-3.5 h-3.5 text-[var(--primary)]" />
+          <span className="text-[11px] font-medium hidden sm:inline">Help</span>
+        </button>
 
         {/* Notifications */}
         <div className="relative">

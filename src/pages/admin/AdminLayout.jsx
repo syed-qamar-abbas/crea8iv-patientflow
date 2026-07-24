@@ -1,8 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, Building2, Receipt, LogOut, Rocket, LifeBuoy, SlidersHorizontal,
+  LayoutDashboard, Users, Building2, Receipt, LogOut, LifeBuoy, SlidersHorizontal,
 } from 'lucide-react';
 import { appPath } from '../../config/api';
+import ClinicLogoMark from '../../components/branding/ClinicLogoMark';
+
+const PLATFORM_LOGO = '/crea8iv.png';
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -29,9 +32,12 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className="w-60 shrink-0 hidden md:flex flex-col border-r border-gray-200/70 dark:border-white/10 bg-white/70 dark:bg-white/[0.03] backdrop-blur-xl">
         <div className="p-5 flex items-center gap-3 border-b border-gray-200/70 dark:border-white/10">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg bg-gradient-to-br from-orange-600 to-orange-500">
-            <Rocket className="w-5 h-5" />
-          </div>
+          <ClinicLogoMark
+            logo={PLATFORM_LOGO}
+            alt="Crea8iv Media logo"
+            className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border border-orange-100 bg-white shadow-lg"
+            imageClassName="h-full w-full object-contain p-1"
+          />
           <div>
             <p className="text-sm font-black text-gray-900 dark:text-white leading-tight">Crea8iv PatientFlow</p>
             <p className="text-[10px] font-bold uppercase tracking-wider text-orange-500">Owner Portal</p>
@@ -77,7 +83,15 @@ export default function AdminLayout() {
       <div className="flex-1 min-w-0">
         {/* Mobile top bar */}
         <div className="md:hidden flex items-center justify-between p-4 border-b border-gray-200/70 dark:border-white/10 bg-white/70 dark:bg-white/[0.03]">
-          <p className="text-sm font-black text-gray-900 dark:text-white">PatientFlow Owner Portal</p>
+          <div className="flex items-center gap-2">
+            <ClinicLogoMark
+              logo={PLATFORM_LOGO}
+              alt="Crea8iv Media logo"
+              className="h-9 w-9 rounded-lg flex items-center justify-center overflow-hidden border border-orange-100 bg-white shadow-sm"
+              imageClassName="h-full w-full object-contain p-1"
+            />
+            <p className="text-sm font-black text-gray-900 dark:text-white">PatientFlow Owner Portal</p>
+          </div>
           <button onClick={handleLogout} className="text-gray-500"><LogOut className="w-4 h-4" /></button>
         </div>
         <div className="md:hidden flex gap-1 p-2 border-b border-gray-200/70 dark:border-white/10 overflow-x-auto">

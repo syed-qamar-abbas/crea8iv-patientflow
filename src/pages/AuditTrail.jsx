@@ -29,6 +29,7 @@ export default function AuditTrail() {
   const [actionFilter, setActionFilter] = useState('all');
   const [entityFilter, setEntityFilter] = useState('all');
   const [selectedLog, setSelectedLog] = useState(null);
+  const [notice, setNotice] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -60,8 +61,14 @@ export default function AuditTrail() {
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Audit Trail</h1>
           <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">Live log of system actions and changes. Demo audit records removed.</p>
         </div>
-        <Button variant="secondary" onClick={() => alert('Live audit CSV export can be added next.')}><Download className="h-4 w-4" /> Export</Button>
+        <Button variant="secondary" onClick={() => setNotice('Live audit CSV export can be added next.')}><Download className="h-4 w-4" /> Export</Button>
       </div>
+
+      {notice && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+          {notice}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[

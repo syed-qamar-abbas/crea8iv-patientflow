@@ -78,6 +78,24 @@ class ClientController {
         $countStmt->execute($params);
         $total = intval($countStmt->fetchColumn());
 
+        // Workflow stage distribution over the WHOLE filtered set. The page array
+        // below is capped by $limit, so counting it client-side under-reports as
+        // soon as a clinic has more patients than one page.
+        // Installs that predate the template-interface migration have no
+        // workflowStage column — degrade to null rather than breaking the list.
+        $stageCounts = null;
+        try {
+            $stageStmt = $db->prepare("SELECT workflowStage, COUNT(*) AS stageTotal FROM Client WHERE $whereSql GROUP BY workflowStage");
+            $stageStmt->execute($params);
+            $stageCounts = [];
+            foreach ($stageStmt->fetchAll() as $row) {
+                // NULL/'' means "not yet staged" — callers map that onto their first stage.
+                $stageCounts[$row['workflowStage'] ?? ''] = intval($row['stageTotal']);
+            }
+        } catch (Exception $e) {
+            $stageCounts = null;
+        }
+
         // Get clients
         $stmt = $db->prepare("SELECT * FROM Client WHERE $whereSql ORDER BY createdAt DESC LIMIT $limit OFFSET $offset");
         $stmt->execute($params);
@@ -86,6 +104,7 @@ class ClientController {
         send_json([
             'clients' => $clients,
             'total' => $total,
+            'stageCounts' => $stageCounts,
             'page' => $page,
             'pages' => ceil($total / $limit)
         ]);

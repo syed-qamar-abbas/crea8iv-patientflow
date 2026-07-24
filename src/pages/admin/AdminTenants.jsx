@@ -119,6 +119,189 @@ function useUsernameAvailability(username, excludeUserId = '') {
   return state;
 }
 
+function TenantActionModal({ tenant, action, form, setForm, onClose, onConfirm, busy }) {
+  if (!tenant || !action) return null;
+  const titles = {
+    manage: 'Manage Clinic Portal',
+    activate: 'Activate Subscription',
+    suspend: 'Deactivate Access',
+    extend: 'Extend Subscription',
+  };
+  const confirmLabels = {
+    manage: 'Open Clinic Portal',
+    activate: 'Activate',
+    suspend: 'Deactivate',
+    extend: 'Extend',
+  };
+  const isBusy = busy === tenant.id;
+
+  return (
+    <Modal isOpen={!!tenant && !!action} onClose={onClose} title={titles[action] || 'Confirm Action'} size="sm">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-orange-900 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-100">
+          <p className="text-sm font-bold">{tenant.name}</p>
+          <p className="mt-1 text-xs leading-5">
+            {action === 'manage' && 'You will be signed in as the clinic owner. A banner lets you return to super-admin.'}
+            {action === 'activate' && 'Start or renew this clinic subscription with the selected billing cycle.'}
+            {action === 'suspend' && 'Clinic users will lose access until the subscription is activated again.'}
+            {action === 'extend' && 'Adds time from the current subscription end date when available.'}
+          </p>
+        </div>
+
+        {action === 'activate' && (
+          <label className="block">
+            <span className={labelCls}>Billing cycle</span>
+            <select
+              value={form.billingCycle}
+              onChange={(e) => setForm(current => ({ ...current, billingCycle: e.target.value }))}
+              className={field}
+            >
+              <option value="monthly">Monthly - PKR 20,000 default</option>
+              <option value="annual">Annual - PKR 120,000 Starter offer</option>
+            </select>
+          </label>
+        )}
+
+        {action === 'suspend' && (
+          <label className="block">
+            <span className={labelCls}>Reason</span>
+            <textarea
+              value={form.reason}
+              onChange={(e) => setForm(current => ({ ...current, reason: e.target.value }))}
+              rows={3}
+              className={field}
+              placeholder="Subscription unpaid"
+            />
+          </label>
+        )}
+
+        {action === 'extend' && (
+          <label className="block">
+            <span className={labelCls}>Extend by months</span>
+            <input
+              type="number"
+              min="1"
+              value={form.months}
+              onChange={(e) => setForm(current => ({ ...current, months: e.target.value }))}
+              className={field}
+            />
+          </label>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isBusy}
+            className="rounded-lg px-3 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 disabled:opacity-60 dark:text-gray-300 dark:hover:bg-white/10"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isBusy || (action === 'suspend' && !form.reason.trim()) || (action === 'extend' && Number(form.months) < 1)}
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-60 ${
+              action === 'suspend' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-orange-600 hover:bg-orange-700'
+            }`}
+          >
+            {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {confirmLabels[action] || 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function CopyLoginLinkModal({ url, onClose }) {
+  return (
+    <Modal isOpen={!!url} onClose={onClose} title="Copy Login Link" size="sm">
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600 dark:text-gray-300">Clipboard access is unavailable in this browser. Select and copy the link below.</p>
+        <input
+          readOnly
+          value={url || ''}
+          onFocus={(e) => e.target.select()}
+          className={`${field} font-mono text-xs`}
+        />
+        <div className="flex justify-end">
+          <button type="button" onClick={onClose} className="rounded-lg bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700">Done</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function OwnerCredentialSuccessModal({ result, onClose }) {
+  const [copied, setCopied] = useState('');
+  if (!result) return null;
+  const rows = [
+    ['username', 'Username', result.ownerUsername],
+    ['password', 'Password', result.ownerPassword],
+    ['email', 'Contact email', result.ownerEmail],
+  ];
+  const credentialText = [
+    result.message || 'Clinic created.',
+    '',
+    'Owner login',
+    `Username: ${result.ownerUsername || ''}`,
+    `Password: ${result.ownerPassword || ''}`,
+    `Contact email: ${result.ownerEmail || ''}`,
+  ].join('\n');
+
+  const copy = async (key, value) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
+      setTimeout(() => setCopied(''), 1500);
+    } catch (_) {
+      setCopied('');
+    }
+  };
+
+  return (
+    <Modal isOpen={!!result} onClose={onClose} title="Clinic Created" size="md">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
+          <p className="text-sm font-bold">{result.message || 'Clinic created successfully.'}</p>
+          <p className="mt-1 text-xs leading-5">Share these owner credentials through your approved handover process.</p>
+        </div>
+        <div className="grid gap-2">
+          {rows.map(([key, label, value]) => (
+            <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
+                <p className="break-all font-mono text-sm font-bold text-gray-900 dark:text-white">{value || '—'}</p>
+              </div>
+              {value && (
+                <button
+                  type="button"
+                  onClick={() => copy(key, value)}
+                  className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:border-orange-300 hover:text-orange-600 dark:border-white/10 dark:bg-slate-900 dark:text-gray-300"
+                >
+                  {copied === key ? 'Copied' : 'Copy'}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => copy('all', credentialText)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-600 hover:border-orange-300 hover:text-orange-600 dark:border-white/10 dark:text-gray-300"
+          >
+            {copied === 'all' ? 'Copied All' : 'Copy All'}
+          </button>
+          <button type="button" onClick={onClose} className="rounded-lg bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700">Done</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function AdminTenants() {
   const [tenants, setTenants] = useState(null);
   const [error, setError] = useState('');
@@ -130,6 +313,10 @@ export default function AdminTenants() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [copiedId, setCopiedId] = useState('');
+  const [copyFallbackUrl, setCopyFallbackUrl] = useState('');
+  const [actionTenant, setActionTenant] = useState(null);
+  const [actionType, setActionType] = useState('');
+  const [actionForm, setActionForm] = useState({ billingCycle: 'monthly', reason: 'Subscription unpaid', months: '1' });
 
   const load = () => fetchApi('/admin/tenants').then(setTenants).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
@@ -160,8 +347,22 @@ export default function AdminTenants() {
     return list;
   }, [tenants, filter, query]);
 
+  const openTenantAction = (t, action) => {
+    setActionTenant(t);
+    setActionType(action);
+    setActionForm({
+      billingCycle: 'monthly',
+      reason: t.suspensionReason || 'Subscription unpaid',
+      months: '1',
+    });
+  };
+
+  const closeTenantAction = () => {
+    setActionTenant(null);
+    setActionType('');
+  };
+
   const manage = (t) => {
-    if (!window.confirm(`Open ${t.name}'s portal as superadmin?\n\nYou'll be signed in as its owner to manage staff, services, branding and settings. A banner lets you exit back to admin anytime.`)) return;
     run(t.id, async () => {
       const res = await fetchApi(`/admin/tenants/${t.id}/impersonate`, { method: 'POST' });
       enterImpersonation({ accessToken: res.accessToken, refreshToken: res.refreshToken, user: res.user, clinicName: res.clinic?.name || t.name });
@@ -173,7 +374,7 @@ export default function AdminTenants() {
     const base = t.customDomain ? `https://${t.customDomain}` : (window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, ''));
     const url = `${base}/login`;
     try { await navigator.clipboard.writeText(url); setCopiedId(t.id); setTimeout(() => setCopiedId(''), 1500); }
-    catch (_) { window.prompt('Copy this login link:', url); }
+    catch (_) { setCopyFallbackUrl(url); }
   };
 
   const run = async (id, fn) => {
@@ -189,22 +390,33 @@ export default function AdminTenants() {
     }
   };
 
-  const activate = (t) => {
-    const cycle = window.prompt('Billing cycle: type "monthly" (default PKR 20,000) or "annual" (Starter yearly offer PKR 120,000 upfront)', 'monthly');
-    if (!cycle || !['monthly', 'annual'].includes(cycle)) return;
-    run(t.id, () => fetchApi(`/admin/tenants/${t.id}/activate`, { method: 'POST', body: JSON.stringify({ billingCycle: cycle }) }));
-  };
-
-  const suspend = (t) => {
-    const reason = window.prompt(`Deactivate "${t.name}"? Enter a reason:`, 'Subscription unpaid');
-    if (reason === null) return;
-    run(t.id, () => fetchApi(`/admin/tenants/${t.id}/suspend`, { method: 'POST', body: JSON.stringify({ reason }) }));
-  };
-
-  const extend = (t) => {
-    const months = parseInt(window.prompt('Extend by how many months?', '1'), 10);
-    if (!months || months < 1) return;
-    run(t.id, () => fetchApi(`/admin/tenants/${t.id}/extend`, { method: 'POST', body: JSON.stringify({ months }) }));
+  const executeTenantAction = () => {
+    if (!actionTenant || !actionType) return;
+    if (actionType === 'manage') {
+      manage(actionTenant);
+      return;
+    }
+    if (actionType === 'activate') {
+      run(actionTenant.id, () => fetchApi(`/admin/tenants/${actionTenant.id}/activate`, {
+        method: 'POST',
+        body: JSON.stringify({ billingCycle: actionForm.billingCycle }),
+      })).then(closeTenantAction);
+      return;
+    }
+    if (actionType === 'suspend') {
+      run(actionTenant.id, () => fetchApi(`/admin/tenants/${actionTenant.id}/suspend`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: actionForm.reason }),
+      })).then(closeTenantAction);
+      return;
+    }
+    if (actionType === 'extend') {
+      const months = Math.max(1, parseInt(actionForm.months, 10) || 1);
+      run(actionTenant.id, () => fetchApi(`/admin/tenants/${actionTenant.id}/extend`, {
+        method: 'POST',
+        body: JSON.stringify({ months }),
+      })).then(closeTenantAction);
+    }
   };
 
   const toggleGrowthFeature = (t, key) => {
@@ -338,7 +550,7 @@ export default function AdminTenants() {
                     ) : (
                       <>
                         {t.status !== 'archived' && (
-                          <button onClick={() => manage(t)} title="Sign in to this clinic's portal as superadmin" className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 px-2.5 py-1.5 text-xs font-bold text-white">
+                          <button onClick={() => openTenantAction(t, 'manage')} title="Sign in to this clinic's portal as superadmin" className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 px-2.5 py-1.5 text-xs font-bold text-white">
                             <LogIn className="w-3.5 h-3.5" /> Manage
                           </button>
                         )}
@@ -350,13 +562,13 @@ export default function AdminTenants() {
                                 {copiedId === t.id ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 hover:text-orange-600" />}
                               </button>
                               {(t.status === 'pending' || t.status === 'suspended' || t.status === 'grace') && (
-                                <button onClick={() => activate(t)} title="Activate (new subscription)" className={`${iconBtn} hover:text-emerald-600`}><PlayCircle className="w-4 h-4" /></button>
+                                <button onClick={() => openTenantAction(t, 'activate')} title="Activate (new subscription)" className={`${iconBtn} hover:text-emerald-600`}><PlayCircle className="w-4 h-4" /></button>
                               )}
                               {t.subscriptionExpiresAt && t.status !== 'pending' && (
-                                <button onClick={() => extend(t)} title="Extend subscription" className={`${iconBtn} hover:text-orange-600`}><CalendarPlus className="w-4 h-4" /></button>
+                                <button onClick={() => openTenantAction(t, 'extend')} title="Extend subscription" className={`${iconBtn} hover:text-orange-600`}><CalendarPlus className="w-4 h-4" /></button>
                               )}
                               {(t.status === 'active' || t.status === 'trial' || t.status === 'grace') && (
-                                <button onClick={() => suspend(t)} title="Deactivate access" className={`${iconBtn} hover:text-rose-600`}><PauseCircle className="w-4 h-4" /></button>
+                                <button onClick={() => openTenantAction(t, 'suspend')} title="Deactivate access" className={`${iconBtn} hover:text-rose-600`}><PauseCircle className="w-4 h-4" /></button>
                               )}
                               <button onClick={() => setEditTenant(t)} title="Edit clinic details" className={`${iconBtn} hover:text-orange-600`}><Pencil className="w-4 h-4" /></button>
                               {t.status !== 'archived' && (
@@ -395,11 +607,21 @@ export default function AdminTenants() {
           onDeleted={() => { setDeleteTenant(null); load(); }}
         />
       )}
+      <TenantActionModal
+        tenant={actionTenant}
+        action={actionType}
+        form={actionForm}
+        setForm={setActionForm}
+        onClose={closeTenantAction}
+        onConfirm={executeTenantAction}
+        busy={busy}
+      />
+      <CopyLoginLinkModal url={copyFallbackUrl} onClose={() => setCopyFallbackUrl('')} />
       {drawerId && (
         <TenantDrawer
           id={drawerId}
           onClose={() => setDrawerId(null)}
-          onManage={(t) => { setDrawerId(null); manage(t); }}
+          onManage={(t) => { setDrawerId(null); openTenantAction(t, 'manage'); }}
           onEdit={(t) => { setDrawerId(null); setEditTenant(t); }}
           onChanged={load}
         />
@@ -608,6 +830,7 @@ function TenantAutomationControls({ tenantId }) {
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showOwnerPassword, setShowOwnerPassword] = useState(false);
+  const [confirmPasswordReset, setConfirmPasswordReset] = useState(false);
   const [err, setErr] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -710,12 +933,12 @@ function TenantAutomationControls({ tenantId }) {
   };
 
   const resetOwnerPassword = async () => {
-    if (!window.confirm('Generate a new owner password for this clinic? The existing owner password will stop working.')) return;
     setSaving(true); setErr(''); setNotice('');
     try {
       const res = await fetchApi(`/admin/tenants/${tenantId}/owner-password`, { method: 'POST' });
       setData((d) => ({ ...d, credentials: res.credentials }));
       setShowOwnerPassword(true);
+      setConfirmPasswordReset(false);
       setNotice('Owner password generated and saved.');
     } catch (e) {
       setErr(e.message);
@@ -793,7 +1016,7 @@ function TenantAutomationControls({ tenantId }) {
             <p className="text-[11px] text-gray-500 dark:text-gray-400">Admin-visible owner username and password for handover and support.</p>
           </div>
           <button
-            onClick={resetOwnerPassword}
+            onClick={() => setConfirmPasswordReset(true)}
             disabled={saving}
             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:border-orange-300 hover:text-orange-600 disabled:opacity-60 dark:border-white/10 dark:bg-slate-900 dark:text-gray-300"
           >
@@ -916,6 +1139,33 @@ function TenantAutomationControls({ tenantId }) {
           </div>
         </div>
       </div>
+      <Modal isOpen={confirmPasswordReset} onClose={() => setConfirmPasswordReset(false)} title="Reset Owner Password" size="sm">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+            <p className="text-sm font-bold">Generate a new owner password?</p>
+            <p className="mt-1 text-xs leading-5">The existing owner password will stop working. The new temporary password will be shown here for admin handover.</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmPasswordReset(false)}
+              disabled={saving}
+              className="rounded-lg px-3 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 disabled:opacity-60 dark:text-gray-300 dark:hover:bg-white/10"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={resetOwnerPassword}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700 disabled:opacity-60"
+            >
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Reset Password
+            </button>
+          </div>
+        </div>
+      </Modal>
     </section>
   );
 }
@@ -930,6 +1180,7 @@ function CreateClinicModal({ onClose, onCreated }) {
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [createdResult, setCreatedResult] = useState(null);
   const ownerUsername = useUsernameAvailability(f.ownerUsername);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
@@ -943,12 +1194,7 @@ function CreateClinicModal({ onClose, onCreated }) {
         owner: { name: f.ownerName, username: f.ownerUsername, email: f.ownerEmail || f.email, password: f.ownerPassword },
       };
       const res = await fetchApi('/admin/tenants', { method: 'POST', body: JSON.stringify(body) });
-      if (res.ownerPassword) {
-        window.alert(`${res.message || 'Clinic created.'}\n\nOwner login\nUsername: ${res.ownerUsername}\nPassword: ${res.ownerPassword}\nContact email: ${res.ownerEmail}`);
-      } else {
-        window.alert(res.message || 'Clinic created.');
-      }
-      onCreated();
+      setCreatedResult(res);
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -1020,6 +1266,13 @@ function CreateClinicModal({ onClose, onCreated }) {
             {saving && <Loader2 className="w-4 h-4 animate-spin" />} Create clinic
           </button>
         </div>
+        <OwnerCredentialSuccessModal
+          result={createdResult}
+          onClose={() => {
+            setCreatedResult(null);
+            onCreated();
+          }}
+        />
       </div>
     </Modal>
   );

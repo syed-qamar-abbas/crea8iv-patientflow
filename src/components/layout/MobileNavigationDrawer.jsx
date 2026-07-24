@@ -78,6 +78,7 @@ export default function MobileNavigationDrawer({ open, onClose }) {
                       <NavLink
                         key={to}
                         to={to}
+                        data-training={`nav-${MODULE_KEYS[to]}`}
                         onClick={onClose}
                         className={({ isActive }) => clsx(
                           'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition',

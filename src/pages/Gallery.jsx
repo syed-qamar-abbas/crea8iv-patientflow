@@ -3,6 +3,7 @@ import { Image, Loader2, Trash2, Upload } from 'lucide-react';
 import { API_URL, fetchApi } from '../config/api';
 import { useClinic } from '../context/ClinicContext';
 import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
 
 export default function Gallery() {
   const { term, features } = useClinic();
@@ -13,6 +14,8 @@ export default function Gallery() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchApi('/clients').then(rows => {
@@ -31,6 +34,7 @@ export default function Gallery() {
     const file = event.target.files?.[0];
     if (!file || !clientId) return;
     setUploading(true);
+    setError('');
     try {
       const form = new FormData();
       form.append('image', file);
@@ -41,17 +45,23 @@ export default function Gallery() {
       if (!response.ok) throw new Error('Upload failed');
       setItems(await fetchApi(`/gallery/${clientId}`));
     } catch (err) {
-      alert(err.message || 'Upload failed.');
+      setError(err.message || 'Upload failed.');
     } finally {
       setUploading(false);
       event.target.value = '';
     }
   };
 
-  const remove = async (item) => {
-    if (!confirm(`Delete this ${galleryLabel.toLowerCase()} item?`)) return;
-    await fetchApi(`/gallery/${item.id}`, { method: 'DELETE' });
-    setItems(await fetchApi(`/gallery/${clientId}`));
+  const remove = async () => {
+    if (!deleteTarget) return;
+    setError('');
+    try {
+      await fetchApi(`/gallery/${deleteTarget.id}`, { method: 'DELETE' });
+      setDeleteTarget(null);
+      setItems(await fetchApi(`/gallery/${clientId}`));
+    } catch (err) {
+      setError(err.message || `${galleryLabel} item could not be deleted.`);
+    }
   };
 
   if (loading) return <div className="flex justify-center gap-2 py-16 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading {galleryLabel.toLowerCase()}...</div>;
@@ -70,6 +80,11 @@ export default function Gallery() {
           <input type="file" accept="image/*" className="hidden" disabled={!clientId || uploading} onChange={upload} />
         </label>
       </div>
+      {error && (
+        <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+          {error}
+        </div>
+      )}
       <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900">
         <label className="text-xs font-bold text-gray-500">{patientLabel}</label>
         <select className="premium-input mt-1 w-full rounded-lg px-3 py-2 text-sm" value={clientId} onChange={e => setClientId(e.target.value)}>
@@ -81,10 +96,22 @@ export default function Gallery() {
         <div className="rounded-xl border border-dashed border-gray-200 py-16 text-center"><Image className="mx-auto mb-3 h-10 w-10 text-gray-300" /><p className="text-sm text-gray-400">Create/select a {patientLabel.toLowerCase()} to manage {galleryLabel.toLowerCase()} records.</p></div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {items.map(item => <div key={item.id} className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"><img src={item.imageUrl} alt={item.service || 'Gallery item'} className="h-44 w-full object-cover" /><div className="p-3"><p className="text-xs font-bold">{item.service || item.type}</p><p className="mt-1 text-[11px] text-gray-500">{item.notes || 'No notes'}</p><Button variant="danger" size="sm" className="mt-3" onClick={() => remove(item)}><Trash2 className="h-4 w-4" /> Delete</Button></div></div>)}
+          {items.map(item => <div key={item.id} className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-slate-900"><img src={item.imageUrl} alt={item.service || 'Gallery item'} className="h-44 w-full object-cover" /><div className="p-3"><p className="text-xs font-bold">{item.service || item.type}</p><p className="mt-1 text-[11px] text-gray-500">{item.notes || 'No notes'}</p><Button variant="danger" size="sm" className="mt-3" onClick={() => setDeleteTarget(item)}><Trash2 className="h-4 w-4" /> Delete</Button></div></div>)}
           {items.length === 0 && <div className="col-span-full rounded-xl border border-dashed border-gray-200 py-16 text-center text-sm text-gray-400">No {galleryLabel.toLowerCase()} items for this {patientLabel.toLowerCase()}.</div>}
         </div>
       )}
+      <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title={`Delete ${galleryLabel} Item`} size="sm">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-100">
+            <p className="text-sm font-bold">Delete this {galleryLabel.toLowerCase()} item?</p>
+            <p className="mt-1 text-xs leading-5">This private operational file will be removed from the selected {patientLabel.toLowerCase()} record.</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="danger" onClick={remove}><Trash2 className="h-4 w-4" /> Delete</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

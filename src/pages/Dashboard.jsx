@@ -42,9 +42,12 @@ export default function Dashboard() {
   // Seed from cached lists so returning to the dashboard renders instantly.
   const [data, setData] = useState(() => {
     const asArr = (v, key) => Array.isArray(v) ? v : (v?.[key] ?? []);
+    const cachedClients = peekApiCacheByPrefix('/clients');
     return {
       appointments: asArr(peekApiCacheByPrefix('/appointments')),
-      clients: asArr(peekApiCacheByPrefix('/clients'), 'clients'),
+      clients: asArr(cachedClients, 'clients'),
+      clientsTotal: cachedClients?.total ?? null,
+      clientStageCounts: cachedClients?.stageCounts ?? null,
       staff: asArr(peekApiCacheByPrefix('/staff')),
       services: asArr(peekApiCacheByPrefix('/services')),
       invoices: asArr(peekApiCacheByPrefix('/invoices'), 'invoices'),
@@ -66,6 +69,8 @@ export default function Dashboard() {
       setData({
         appointments: Array.isArray(appointments) ? appointments : [],
         clients: Array.isArray(clients) ? clients : (clients.clients || []),
+        clientsTotal: Array.isArray(clients) ? clients.length : (clients.total ?? null),
+        clientStageCounts: Array.isArray(clients) ? null : (clients.stageCounts ?? null),
         staff: Array.isArray(staff) ? staff : [],
         services: Array.isArray(services) ? services : [],
         invoices: Array.isArray(invoices) ? invoices : [],
@@ -81,10 +86,24 @@ export default function Dashboard() {
   const topStaff = useMemo(() => activeStaff.slice().sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0)).slice(0, 5), [activeStaff]);
   const goal = industryTemplate.config.primaryGoal || { label: `Book ${term('appointment', 'Appointment')}` };
   const workflowStages = industryTemplate.config.workflow?.stages || [];
-  const pipelineCounts = useMemo(() => workflowStages.map(stage => ({
-    stage,
-    count: data.clients.filter(client => (client.workflowStage || workflowStages[0]) === stage).length,
-  })), [data.clients, workflowStages.join('|')]);
+  // /clients returns one page (default 50), so counting the array under-reports
+  // any clinic with more patients than that. Prefer the server-side totals.
+  const activeClientCount = data.clientsTotal ?? data.clients.filter(c => c.status !== 'inactive').length;
+  const pipelineCounts = useMemo(() => {
+    const stageCounts = data.clientStageCounts;
+    if (stageCounts) {
+      // Unstaged patients (NULL stage, keyed '') fall into the first stage.
+      const unstaged = stageCounts[''] ?? 0;
+      return workflowStages.map((stage, i) => ({
+        stage,
+        count: (stageCounts[stage] ?? 0) + (i === 0 ? unstaged : 0),
+      }));
+    }
+    return workflowStages.map(stage => ({
+      stage,
+      count: data.clients.filter(client => (client.workflowStage || workflowStages[0]) === stage).length,
+    }));
+  }, [data.clients, data.clientStageCounts, workflowStages.join('|')]);
 
   if (loading && !hasSeed) {
     return <div className="space-y-4"><CardGridSkeleton count={4} /><TableSkeleton rows={6} cols={4} /></div>;
@@ -123,7 +142,7 @@ export default function Dashboard() {
         {canSeeFinancials
           ? <StatCard title="Collected This Month" value={money(data.financials?.totalRevenue)} icon={Receipt} />
           : <StatCard title="Pending Invoices" value={String(pendingInvoices.length)} icon={Receipt} />}
-        <StatCard title={industryTemplate.config.dashboard.activePatients} value={String(data.clients.filter(c => c.status !== 'inactive').length)} icon={Users} />
+        <StatCard title={industryTemplate.config.dashboard.activePatients} value={String(activeClientCount)} icon={Users} />
         <StatCard title={industryTemplate.config.dashboard.activeStaff} value={String(activeStaff.length)} icon={UserCheck} />
       </div>
 

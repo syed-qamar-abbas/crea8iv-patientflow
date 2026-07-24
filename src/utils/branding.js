@@ -2,7 +2,9 @@ export function isImageLogo(value) {
   return typeof value === 'string' && (
     value.startsWith('data:image/') ||
     value.startsWith('http://') ||
-    value.startsWith('https://')
+    value.startsWith('https://') ||
+    value.startsWith('/') ||
+    /\.(png|jpe?g|webp|gif|svg)$/i.test(value)
   );
 }
 

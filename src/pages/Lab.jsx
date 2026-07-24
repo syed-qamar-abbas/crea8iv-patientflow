@@ -29,6 +29,7 @@ export default function Lab() {
   const [search, setSearch] = useState('');
   const [edit, setEdit] = useState(null); // case being edited, or 'new'
   const [error, setError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = () => {
     const params = new URLSearchParams();
@@ -38,7 +39,14 @@ export default function Lab() {
   };
   useEffect(() => { const t = setTimeout(load, search ? 250 : 0); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [filter, search]);
 
-  const remove = async (c) => { if (!window.confirm(`Delete this ${labLabel.toLowerCase()} case?`)) return; try { await fetchApi(`/lab/${c.id}`, { method: 'DELETE' }); load(); } catch (e) { setError(e.message); } };
+  const remove = async () => {
+    if (!deleteTarget) return;
+    try {
+      await fetchApi(`/lab/${deleteTarget.id}`, { method: 'DELETE' });
+      setDeleteTarget(null);
+      load();
+    } catch (e) { setError(e.message); }
+  };
   const quickStatus = async (c, status) => { try { await fetchApi(`/lab/${c.id}`, { method: 'PUT', body: JSON.stringify({ status }) }); load(); } catch (e) { setError(e.message); } };
 
   return (
@@ -104,7 +112,7 @@ export default function Lab() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => setEdit(c)} title="Edit" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-[var(--primary)] dark:hover:bg-white/10"><Pencil className="h-4 w-4" /></button>
-                        <button onClick={() => remove(c)} title="Delete" className="rounded-lg p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => setDeleteTarget(c)} title="Delete" className="rounded-lg p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -116,6 +124,15 @@ export default function Lab() {
       </div>
 
       {edit && <LabModal labCase={edit === 'new' ? null : edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
+      <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title={`Delete ${labLabel} Case`} size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">Delete this {labLabel.toLowerCase()} case for {deleteTarget?.patientName || 'this patient'}?</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Keep Case</Button>
+            <Button variant="danger" onClick={remove}>Delete Case</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

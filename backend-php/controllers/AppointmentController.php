@@ -221,9 +221,39 @@ class AppointmentController {
         send_json($appt);
     }
 
+    // Self-heals the `source` column (lead source: Walk-in, Meta, Google, …) on
+    // installs that predate it, so a file-copy deploy works without a manual
+    // migration step. Mirrors PublicSiteController::ensureClinicPaymentColumns.
+    private function ensureSourceColumn($db) {
+        try {
+            if (DB_DRIVER === 'sqlite') {
+                $existing = array_column($db->query("PRAGMA table_info(Appointment)")->fetchAll(), 'name');
+                if (!in_array('source', $existing, true)) {
+                    $db->exec("ALTER TABLE Appointment ADD COLUMN source VARCHAR(60) DEFAULT NULL");
+                }
+            } else {
+                $stmt = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Appointment' AND COLUMN_NAME = 'source'");
+                $stmt->execute();
+                if (!(int)$stmt->fetchColumn()) {
+                    $db->exec("ALTER TABLE Appointment ADD COLUMN source VARCHAR(60) DEFAULT NULL");
+                }
+            }
+        } catch (Exception $e) { /* non-fatal: source is optional */ }
+    }
+
+    // Lead source is a short free-ish label chosen from a UI list (Walk-in, Meta,
+    // Google, WhatsApp, Referral, …). Keep it bounded; empty → null.
+    private function sanitizeSource($value) {
+        if ($value === null) return null;
+        $value = trim((string)$value);
+        if ($value === '') return null;
+        return mb_substr($value, 0, 60);
+    }
+
     public function create($input, $user) {
         $db = DB::getConnection();
-        
+        $this->ensureSourceColumn($db);
+
         $id = generate_uuid();
         $branchId = $input['branchId'] ?? null;
         $clientId = $input['clientId'] ?? '';
@@ -239,6 +269,7 @@ class AppointmentController {
         $notes = $input['notes'] ?? null;
         $status = $input['status'] ?? 'pending';
         $eventType = $this->eventType($input['eventType'] ?? 'appointment');
+        $source = $this->sanitizeSource($input['source'] ?? null);
 
         if (empty($clientId) || empty($staffId) || empty($date) || empty($startTime) || empty($endTime)) {
             send_error('clientId, staffId, date, startTime, and endTime are required', 400);
@@ -263,9 +294,9 @@ class AppointmentController {
             send_error('Time slot conflict: staff already has an appointment in this period', 409, ['conflicts' => $conflicts]);
         }
 
-        $stmt = $db->prepare("INSERT INTO Appointment (id, clinicId, branchId, clientId, staffId, serviceId, date, startTime, endTime, duration, status, room, notes, price, specialty, eventType) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt = $db->prepare("INSERT INTO Appointment (id, clinicId, branchId, clientId, staffId, serviceId, date, startTime, endTime, duration, status, room, notes, price, specialty, eventType, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
-            $id, $user['clinicId'], $branchId, $clientId, $staffId, $serviceId, $date, $startTime, $endTime, $duration, $status, $room, $notes, $price, $specialty, $eventType
+            $id, $user['clinicId'], $branchId, $clientId, $staffId, $serviceId, $date, $startTime, $endTime, $duration, $status, $room, $notes, $price, $specialty, $eventType, $source
         ]);
 
         $stmt = $db->prepare("SELECT * FROM Appointment WHERE id = ?");
@@ -278,6 +309,7 @@ class AppointmentController {
 
     public function update($input, $user, $id) {
         $db = DB::getConnection();
+        $this->ensureSourceColumn($db);
         
         $stmt = $db->prepare("SELECT * FROM Appointment WHERE id = ? AND clinicId = ?");
         $stmt->execute([$id, $user['clinicId']]);
@@ -322,7 +354,8 @@ class AppointmentController {
             $input['specialty'] = $this->resolveSpecialty($db, $serviceId, $staffId, $existing['specialty'] ?? '');
         }
         if (array_key_exists('eventType', $input)) $input['eventType'] = $this->eventType($input['eventType']);
-        $updatable = ['branchId', 'clientId', 'staffId', 'serviceId', 'date', 'startTime', 'endTime', 'duration', 'status', 'room', 'notes', 'price', 'specialty', 'eventType'];
+        if (array_key_exists('source', $input)) $input['source'] = $this->sanitizeSource($input['source']);
+        $updatable = ['branchId', 'clientId', 'staffId', 'serviceId', 'date', 'startTime', 'endTime', 'duration', 'status', 'room', 'notes', 'price', 'specialty', 'eventType', 'source'];
         foreach ($updatable as $key) {
             if (isset($input[$key])) {
                 $fields[] = "$key = ?";

@@ -66,6 +66,7 @@ function ProfileField({ field, value, onChange, inputClassName }) {
 function ClientFormModal({ isOpen, onClose, onSave, target, saving, term, template }) {
   const isEdit = !!target;
   const [form, setForm] = useState(emptyForm);
+  const [validationError, setValidationError] = useState('');
   const fields = templateFields(template);
   const stages = template.config.workflow?.stages || [];
   const isPipeline = Boolean(template.config.capabilities?.pipeline);
@@ -88,6 +89,7 @@ function ClientFormModal({ isOpen, onClose, onSave, target, saving, term, templa
     } else {
       setForm({ ...emptyForm, workflowStage: stages[0] || '', profileData: {} });
     }
+    setValidationError('');
   }, [target, isOpen, template.templateKey]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -100,9 +102,10 @@ function ClientFormModal({ isOpen, onClose, onSave, target, saving, term, templa
   const submit = () => {
     const missing = fields.find(field => field.required && !String(fieldValue(field.key) || '').trim());
     if (missing) {
-      alert(`${missing.label} is required.`);
+      setValidationError(`${missing.label} is required.`);
       return;
     }
+    setValidationError('');
     onSave({
       name: form.name, phone: form.phone, email: form.email, gender: form.gender, dob: form.dob,
       notes: form.notes, specialty: form.specialty ? [form.specialty] : undefined,
@@ -116,13 +119,22 @@ function ClientFormModal({ isOpen, onClose, onSave, target, saving, term, templa
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? `Edit ${term('patient', 'Patient')}` : `Add New ${term('patient', 'Patient')}`} size="lg">
       <div className="space-y-4">
+        {validationError && (
+          <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            {validationError}
+          </div>
+        )}
         <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 dark:border-indigo-500/20 dark:bg-indigo-500/10">
           <p className="text-xs font-bold text-indigo-900 dark:text-indigo-200">{template.name} profile</p>
           <p className="mt-0.5 text-[11px] text-indigo-600 dark:text-indigo-300">Fields and workflow are controlled by the selected industry template.</p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {fields.map(field => (
-            <div key={field.key} className={field.type === 'textarea' || field.type === 'multi_select' ? 'sm:col-span-2' : ''}>
+            <div
+              key={field.key}
+              data-training={`patient-field-${field.key}`}
+              className={field.type === 'textarea' || field.type === 'multi_select' ? 'sm:col-span-2' : ''}
+            >
               <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{field.label}{field.required ? ' *' : ''}</label>
               <ProfileField field={field} value={fieldValue(field.key)} onChange={value => setFieldValue(field.key, value)} inputClassName={inputCls} />
             </div>
@@ -153,7 +165,7 @@ function ClientFormModal({ isOpen, onClose, onSave, target, saving, term, templa
           </div>
         </div>
         <div className="flex gap-2 pt-2">
-          <Button variant="primary" className="flex-1 justify-center" onClick={submit} disabled={saving}>
+          <Button variant="primary" className="flex-1 justify-center" onClick={submit} disabled={saving} data-training="patient-save-button">
             <Save className="w-4 h-4" /> {saving ? 'Saving...' : isEdit ? 'Save Changes' : `Add ${term('patient', 'Patient')}`}
           </Button>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -278,6 +290,7 @@ export default function Clients() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
 
   const loadClients = async () => {
     const params = new URLSearchParams({
@@ -317,6 +330,7 @@ export default function Clients() {
 
   const handleSave = async (formData) => {
     setSaving(true);
+    setError('');
     try {
       if (editTarget) {
         await fetchApi(`/clients/${editTarget.id}`, { method: 'PUT', body: JSON.stringify(formData) });
@@ -327,7 +341,7 @@ export default function Clients() {
       setShowAddModal(false);
       await loadClients();
     } catch (err) {
-      alert(`Save failed: ${err.message}`);
+      setError(`Save failed: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -336,12 +350,13 @@ export default function Clients() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    setError('');
     try {
       await fetchApi(`/clients/${deleteTarget.id}`, { method: 'DELETE' });
       setDeleteTarget(null);
       await loadClients();
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      setError(`Delete failed: ${err.message}`);
     } finally {
       setDeleting(false);
     }
@@ -393,7 +408,7 @@ export default function Clients() {
           </div>
         </div>
 
-        <Button onClick={() => { setEditTarget(null); setShowAddModal(true); }} size="sm">
+        <Button onClick={() => { setEditTarget(null); setShowAddModal(true); }} size="sm" data-training="patients-new-button">
           <Plus className="w-4 h-4" /> New {term('patient', 'Patient')}
         </Button>
       </div>
@@ -414,6 +429,12 @@ export default function Clients() {
           PKR {filtered.reduce((a, c) => a + Number(c.outstandingBalance || 0), 0).toLocaleString()} due
         </span>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+          {error}
+        </div>
+      )}
 
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">

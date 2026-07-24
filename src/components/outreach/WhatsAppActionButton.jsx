@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { fetchApi } from '../../config/api';
@@ -34,20 +35,26 @@ export default function WhatsAppActionButton({
   onLogged,
 }) {
   const { clinicInfo } = useClinic();
+  const [notice, setNotice] = useState('');
   const finalMessage = message || buildClientMessage({ clinicName: clinicInfo.name, client, appointment, template });
   const clientId = client?.id || client?.clientId || appointment?.clientId || appointment?.client?.id;
   const phone = client?.phone || appointment?.clientPhone || appointment?.client?.phone;
+
+  const showNotice = (text) => {
+    setNotice(text);
+    window.setTimeout(() => setNotice(''), 3500);
+  };
 
   const handleClick = async (event) => {
     event.preventDefault();
     event.stopPropagation();
     if (!phone) {
-      alert('This contact has no phone number.');
+      showNotice('No phone number found.');
       return;
     }
     const opened = openWhatsAppMessage(phone, finalMessage);
     if (!opened) {
-      alert('Please add a valid phone number with country code first.');
+      showNotice('Add a valid phone number with country code first.');
       return;
     }
     if (clientId) {
@@ -70,21 +77,24 @@ export default function WhatsAppActionButton({
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-bold transition',
-        size === 'icon' ? 'p-1.5 text-xs' : 'px-3 py-1.5 text-xs',
-        variant === 'primary'
-          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-          : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20',
-        className
-      )}
-      title="Open WhatsApp with this message"
-    >
-      <MessageCircle className={size === 'icon' ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-      {size !== 'icon' && children}
-    </button>
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={handleClick}
+        className={clsx(
+          'inline-flex items-center justify-center gap-1.5 rounded-lg font-bold transition',
+          size === 'icon' ? 'p-1.5 text-xs' : 'px-3 py-1.5 text-xs',
+          variant === 'primary'
+            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20',
+          className
+        )}
+        title="Open WhatsApp with this message"
+      >
+        <MessageCircle className={size === 'icon' ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+        {size !== 'icon' && children}
+      </button>
+      {notice && <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">{notice}</span>}
+    </span>
   );
 }

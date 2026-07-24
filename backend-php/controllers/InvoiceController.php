@@ -23,7 +23,7 @@ class InvoiceController {
         }
     }
 
-    private function assertAppointmentInClinic($db, $appointmentId, $clinicId, $clientId = null) {
+    private function assertAppointmentInClinic($db, $appointmentId, $clinicId, $clientId = null, $ignoreInvoiceId = null) {
         if (empty($appointmentId)) return;
         $sql = "SELECT id FROM Appointment WHERE id = ? AND clinicId = ?";
         $params = [$appointmentId, $clinicId];
@@ -35,6 +35,24 @@ class InvoiceController {
         $stmt->execute($params);
         if (!$stmt->fetch()) {
             send_error('Appointment not found for this client/clinic', 400);
+        }
+
+        // One invoice per appointment (UK_Invoice_AppointmentId). Catch the clash
+        // here and return a clear, actionable message instead of a raw SQL 500 —
+        // this is what fires when a dues/top-up invoice re-links an appointment
+        // that was already billed. The fix for the user is to leave the
+        // appointment unlinked, so say exactly that.
+        $dupSql = "SELECT invoiceNo FROM Invoice WHERE appointmentId = ? AND clinicId = ?";
+        $dupParams = [$appointmentId, $clinicId];
+        if ($ignoreInvoiceId !== null && $ignoreInvoiceId !== '') {
+            $dupSql .= " AND id != ?";
+            $dupParams[] = $ignoreInvoiceId;
+        }
+        $dupStmt = $db->prepare($dupSql);
+        $dupStmt->execute($dupParams);
+        $existingNo = $dupStmt->fetchColumn();
+        if ($existingNo) {
+            send_error("This appointment is already billed on invoice $existingNo. To record a payment against outstanding dues, leave the appointment unlinked (\"No appointment link\").", 409);
         }
     }
 
@@ -420,7 +438,7 @@ class InvoiceController {
         if (!$stmtClient->fetch()) {
             send_error('Client not found', 404);
         }
-        $this->assertAppointmentInClinic($db, $appointmentId, $user['clinicId'], $clientId);
+        $this->assertAppointmentInClinic($db, $appointmentId, $user['clinicId'], $clientId, $id);
 
         $totals = $this->calculateTotals($items, $discountPercent, $taxPercent, $previousBalance, $amountPaid);
         $finalStatus = $status ?: $totals['status'];

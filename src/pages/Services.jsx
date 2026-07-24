@@ -20,6 +20,7 @@ function ServiceFormModal({ isOpen, onClose, onSave, target, saving }) {
   const treatmentLabel = term('treatment', 'Treatment');
   const isEdit = !!target;
   const [form, setForm] = useState(emptyForm);
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     if (target) {
@@ -35,15 +36,17 @@ function ServiceFormModal({ isOpen, onClose, onSave, target, saving }) {
     } else {
       setForm(emptyForm);
     }
+    setValidationError('');
   }, [target, isOpen]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const submit = () => {
     if (!form.name.trim() || form.price === '' || form.duration === '') {
-      alert('Name, price, and duration are required.');
+      setValidationError('Name, price, and duration are required.');
       return;
     }
+    setValidationError('');
     onSave({
       ...form,
       price: Number(form.price),
@@ -55,6 +58,11 @@ function ServiceFormModal({ isOpen, onClose, onSave, target, saving }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? `Edit ${serviceLabel}` : `Add New ${serviceLabel}`} size="md">
       <div className="space-y-4">
+        {validationError && (
+          <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            {validationError}
+          </div>
+        )}
         <div>
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{serviceLabel} Name *</label>
           <input value={form.name} onChange={e => set('name', e.target.value)} placeholder={`e.g. ${treatmentLabel}`}
@@ -193,6 +201,7 @@ export default function Services() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
 
   const loadServices = async () => {
     try {
@@ -209,6 +218,7 @@ export default function Services() {
 
   const handleSave = async (formData) => {
     setSaving(true);
+    setError('');
     try {
       if (editTarget) {
         await fetchApi(`/services/${editTarget.id}`, { method: 'PUT', body: JSON.stringify(formData) });
@@ -219,7 +229,7 @@ export default function Services() {
       setEditTarget(null);
       await loadServices();
     } catch (err) {
-      alert(`Save failed: ${err.message}`);
+      setError(`Save failed: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -228,12 +238,13 @@ export default function Services() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    setError('');
     try {
       await fetchApi(`/services/${deleteTarget.id}`, { method: 'DELETE' });
       setDeleteTarget(null);
       await loadServices();
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      setError(`Delete failed: ${err.message}`);
     } finally {
       setDeleting(false);
     }
@@ -270,6 +281,12 @@ export default function Services() {
           <Plus className="w-4 h-4" /> Add {serviceLabel}
         </Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(service => (

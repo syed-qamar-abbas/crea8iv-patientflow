@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Calendar as CalendarIcon, List, Plus, X, ChevronRight, Pencil, Trash2, Save, Loader2, CalendarClock, QrCode } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar as CalendarIcon, List, Plus, X, ChevronRight, Pencil, Trash2, Save, Loader2, CalendarClock, QrCode, Receipt } from 'lucide-react';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -14,6 +15,7 @@ import PatientSearchSelect from '../components/ui/PatientSearchSelect';
 import QRCheckin from '../components/ui/QRCheckin';
 import WhatsAppActionButton, { buildClientMessage } from '../components/outreach/WhatsAppActionButton';
 import { MANUAL_WHATSAPP_TEMPLATES, openWhatsAppMessage } from '../utils/whatsapp';
+import { invoicePrefillFromAppointment, invoicePrefillSearch } from '../utils/invoicePrefill';
 
 const localizer = momentLocalizer(moment);
 
@@ -33,7 +35,7 @@ const computeEndTime = (start, durationMins) => {
   return `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
 };
 
-function AppointmentDetail({ appt, onClose, onEdit, onDelete, onReschedule, onQr, term }) {
+function AppointmentDetail({ appt, onClose, onEdit, onDelete, onReschedule, onQr, onInvoice, term }) {
   if (!appt) return null;
   const name = apptClientName(appt);
   return (
@@ -83,6 +85,9 @@ function AppointmentDetail({ appt, onClose, onEdit, onDelete, onReschedule, onQr
         )}
       </div>
       <div className="p-6 border-t border-gray-100 dark:border-white/10 space-y-2">
+        <Button variant="primary" size="sm" className="w-full justify-center" onClick={() => onInvoice(appt)}>
+          <Receipt className="w-4 h-4" /> Create Invoice
+        </Button>
         <Button variant="secondary" size="sm" className="w-full justify-center" onClick={() => onQr(appt)} disabled={appt.checkedIn || ['cancelled', 'completed', 'no-show'].includes(appt.status)}>
           <QrCode className="w-4 h-4" /> Secure QR check-in
         </Button>
@@ -103,16 +108,21 @@ function AppointmentDetail({ appt, onClose, onEdit, onDelete, onReschedule, onQr
   );
 }
 
+// Lead sources match the marketing lead-source taxonomy so appointment origin
+// lines up with Meta/Google/walk-in attribution used elsewhere.
+const APPOINTMENT_SOURCES = ['Walk-in', 'Phone Call', 'WhatsApp', 'Referral', 'Google', 'Google Maps', 'Facebook', 'Instagram', 'TikTok', 'Meta Ads', 'Website', 'Existing Patient', 'Other'];
+
 const emptyForm = {
   clientId: '', staffId: '', serviceId: '', otherTreatment: '',
-  price: '',
+  price: '', branchId: '', source: '',
   eventType: 'appointment', date: new Date().toISOString().slice(0, 10),
   startTime: '10:00', duration: 30, room: '', notes: '', status: 'pending',
 };
 
-function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff, services, saving, term, template }) {
+function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff, services, branches, saving, term, template }) {
   const isEdit = !!target;
   const [form, setForm] = useState(emptyForm);
+  const [validationError, setValidationError] = useState('');
   const scheduling = template.config.scheduling || {};
   const eventTypes = scheduling.eventTypes || [{ key: 'appointment', label: term('appointment', 'Appointment') }];
 
@@ -124,6 +134,8 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
         serviceId: target.serviceId || target.service?.id || '',
         otherTreatment: target.otherTreatment || '',
         price: target.price ?? '',
+        branchId: target.branchId || '',
+        source: target.source || '',
         eventType: target.eventType || scheduling.defaultEventType || eventTypes[0]?.key || 'appointment',
         date: target.date ? String(target.date).slice(0, 10) : new Date().toISOString().slice(0, 10),
         startTime: target.startTime || '10:00',
@@ -135,6 +147,7 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
     } else {
       setForm({ ...emptyForm, eventType: scheduling.defaultEventType || eventTypes[0]?.key || 'appointment' });
     }
+    setValidationError('');
   }, [target, isOpen, template.templateKey]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -153,9 +166,10 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
 
   const submit = () => {
     if (!form.clientId || !form.staffId || !form.date || !form.startTime) {
-      alert(`${term('patient', 'Patient')}, ${term('staff', 'staff').toLowerCase()}, date and time are required.`);
+      setValidationError(`${term('patient', 'Patient')}, ${term('staff', 'staff').toLowerCase()}, date and time are required.`);
       return;
     }
+    setValidationError('');
     const endTime = computeEndTime(form.startTime, form.duration);
     const payload = {
       clientId: form.clientId,
@@ -171,6 +185,8 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
       status: form.status,
       price: Number(form.price) || 0,
       eventType: form.eventType,
+      branchId: form.branchId || null,
+      source: form.source || null,
     };
     onSave(payload);
   };
@@ -180,6 +196,11 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? `Edit ${term('appointment', 'Appointment')}` : `New ${term('appointment', 'Appointment')}`} size="md">
       <div className="space-y-4">
+        {validationError && (
+          <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            {validationError}
+          </div>
+        )}
         {eventTypes.length > 1 && (
           <div>
             <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{term('appointment', 'Appointment')} Type *</label>
@@ -188,7 +209,7 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
             </select>
           </div>
         )}
-        <div>
+        <div data-training="appointment-patient-field">
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{term('patient', 'Patient')} *</label>
           <PatientSearchSelect
             value={form.clientId}
@@ -199,7 +220,7 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
           />
           <p className="mt-1 text-[11px] text-gray-400">Type a name, phone number, or {term('patient', 'patient').toLowerCase()} #.</p>
         </div>
-        <div>
+        <div data-training="appointment-service-field">
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{term('service', 'Service')} *</label>
           <select className={inputCls} value={form.serviceId} onChange={e => selectService(e.target.value)}>
             <option value="">Select {term('service', 'service').toLowerCase()}...</option>
@@ -255,6 +276,24 @@ function AppointmentFormModal({ isOpen, onClose, onSave, target, clients, staff,
               <option value="confirmed">Confirmed</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {branches && branches.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">{term('branch', 'Branch')} / Location</label>
+              <select className={inputCls} value={form.branchId} onChange={e => set('branchId', e.target.value)}>
+                <option value="">{branches.length > 1 ? 'Select branch...' : 'Main branch'}</option>
+                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+          )}
+          <div className={branches && branches.length > 0 ? '' : 'col-span-2'}>
+            <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Source</label>
+            <select className={inputCls} value={form.source} onChange={e => set('source', e.target.value)}>
+              <option value="">How did they find us?</option>
+              {APPOINTMENT_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>
@@ -358,6 +397,7 @@ function RescheduleModal({ appt, onClose, onDone, term }) {
 
 export default function Appointments() {
   const { term, industryTemplate } = useClinic();
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState(() => {
     const c = peekApiCacheByPrefix('/appointments');
     return Array.isArray(c) ? c : (c?.appointments ?? []);
@@ -365,6 +405,7 @@ export default function Appointments() {
   const [clients, setClients] = useState([]);
   const [staff, setStaff] = useState([]);
   const [services, setServices] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('list');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -377,6 +418,7 @@ export default function Appointments() {
   const [qrTarget, setQrTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
 
   const loadAppointments = async () => {
     try {
@@ -389,16 +431,18 @@ export default function Appointments() {
 
   const loadAll = async () => {
     try {
-      const [appts, c, s, srv] = await Promise.all([
+      const [appts, c, s, srv, br] = await Promise.all([
         fetchApi('/appointments').catch(() => []),
         fetchApi('/clients').catch(() => ({ clients: [] })),
         fetchApi('/staff').catch(() => []),
         fetchApi('/services').catch(() => []),
+        fetchApi('/branches').catch(() => []),
       ]);
       setAppointments(Array.isArray(appts) ? appts : (appts.appointments ?? appts.data ?? []));
       setClients(Array.isArray(c) ? c : (c.clients ?? c.data ?? []));
       setStaff(Array.isArray(s) ? s : (s.staff ?? s.data ?? []));
       setServices(Array.isArray(srv) ? srv : (srv.services ?? srv.data ?? []));
+      setBranches(Array.isArray(br) ? br : (br.branches ?? br.data ?? []));
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
@@ -410,6 +454,7 @@ export default function Appointments() {
 
   const handleSave = async (payload) => {
     setSaving(true);
+    setError('');
     try {
       if (editTarget) {
         await fetchApi(`/appointments/${editTarget.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -421,7 +466,7 @@ export default function Appointments() {
       setSelectedAppt(null);
       await loadAppointments();
     } catch (err) {
-      alert(`Save failed: ${err.message}`);
+      setError(`Save failed: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -430,13 +475,14 @@ export default function Appointments() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    setError('');
     try {
       await fetchApi(`/appointments/${deleteTarget.id}`, { method: 'DELETE' });
       setDeleteTarget(null);
       setSelectedAppt(null);
       await loadAppointments();
     } catch (err) {
-      alert(`Cancel failed: ${err.message}`);
+      setError(`Cancel failed: ${err.message}`);
     } finally {
       setDeleting(false);
     }
@@ -446,6 +492,12 @@ export default function Appointments() {
     await fetchApi(`/appointments/${appointment.id}/checkin`, { method: 'PUT' });
     setQrTarget(null);
     await loadAppointments();
+  };
+
+  const openInvoiceForAppointment = (appointment) => {
+    const invoicePrefill = invoicePrefillFromAppointment(appointment, 'appointments');
+    const search = invoicePrefillSearch(invoicePrefill);
+    navigate({ pathname: '/invoices', search: search ? `?${search}` : '' }, { state: { invoicePrefill } });
   };
 
   const filtered = useMemo(() => {
@@ -495,6 +547,11 @@ export default function Appointments() {
     {
       key: 'id', label: 'Actions', render: (_, r) => (
         <div className="flex gap-1">
+          <button onClick={(e) => { e.stopPropagation(); openInvoiceForAppointment(r); }}
+            className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600"
+            title="Create invoice">
+            <Receipt className="w-3.5 h-3.5" />
+          </button>
           <button onClick={(e) => { e.stopPropagation(); setEditTarget(r); setShowFormModal(true); }}
             className="p-1.5 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600">
             <Pencil className="w-3.5 h-3.5" />
@@ -551,10 +608,16 @@ export default function Appointments() {
             <option value="amount_desc">Fee — high to low</option>
           </select>
         </div>
-        <Button onClick={() => { setEditTarget(null); setShowFormModal(true); }} size="sm">
+        <Button onClick={() => { setEditTarget(null); setShowFormModal(true); }} size="sm" data-training="appointments-new-button">
           <Plus className="w-4 h-4" /> New {term('appointment', 'Appointment')}
         </Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+          {error}
+        </div>
+      )}
 
       {view === 'calendar' ? (
         <div className="bg-white dark:bg-white/5 rounded-xl shadow-sm border border-gray-100 dark:border-white/10 p-4" style={{ height: 620 }}>
@@ -590,6 +653,7 @@ export default function Appointments() {
             onDelete={(a) => setDeleteTarget(a)}
             onReschedule={(a) => { setRescheduleTarget(a); setSelectedAppt(null); }}
             onQr={(a) => { setQrTarget(a); setSelectedAppt(null); }}
+            onInvoice={openInvoiceForAppointment}
             term={term}
           />
         </>
@@ -617,6 +681,7 @@ export default function Appointments() {
         clients={clients}
         staff={staff}
         services={services}
+        branches={branches}
         saving={saving}
         term={term}
         template={industryTemplate}

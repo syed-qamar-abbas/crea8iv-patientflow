@@ -202,6 +202,7 @@ function StaffFormModal({ isOpen, onClose, onSave, target, saving }) {
   const treatmentLabel = term('treatment', 'Treatment');
   const isEdit = !!target;
   const [form, setForm] = useState(emptyStaffForm);
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     if (target) {
@@ -229,15 +230,17 @@ function StaffFormModal({ isOpen, onClose, onSave, target, saving }) {
     } else {
       setForm(emptyStaffForm);
     }
+    setValidationError('');
   }, [target, isOpen]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const submit = () => {
     if (!form.name.trim() || !form.email.trim()) {
-      alert('Name and email are required.');
+      setValidationError('Name and email are required.');
       return;
     }
+    setValidationError('');
     const payload = {
       name: form.name.trim(),
       role: form.role,
@@ -269,6 +272,11 @@ function StaffFormModal({ isOpen, onClose, onSave, target, saving }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? `Edit ${staffLabel} Profile` : `Create ${staffLabel} Profile`} size="xl">
       <div className="space-y-4">
+        {validationError && (
+          <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            {validationError}
+          </div>
+        )}
         <div>
           <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Full Name *</label>
           <input value={form.name} onChange={e => set('name', e.target.value)} placeholder={`${doctorLabel} name`} className={inputCls} />
@@ -417,6 +425,7 @@ export default function Staff() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
 
   const loadStaff = async () => {
     try {
@@ -433,6 +442,7 @@ export default function Staff() {
 
   const handleSave = async (payload, invitePrefs) => {
     setSaving(true);
+    setError('');
     try {
       if (editTarget) {
         await fetchApi(`/staff/${editTarget.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -452,7 +462,7 @@ export default function Staff() {
       setEditTarget(null);
       await loadStaff();
     } catch (err) {
-      alert(`Save failed: ${err.message}`);
+      setError(`Save failed: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -461,12 +471,13 @@ export default function Staff() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    setError('');
     try {
       await fetchApi(`/staff/${deleteTarget.id}`, { method: 'DELETE' });
       setDeleteTarget(null);
       await loadStaff();
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      setError(`Delete failed: ${err.message}`);
     } finally {
       setDeleting(false);
     }
@@ -516,6 +527,12 @@ export default function Staff() {
           <Plus className="w-4 h-4" /> Add {staffLabel}
         </Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(staff => (

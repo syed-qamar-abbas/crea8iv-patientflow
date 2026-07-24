@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, Clock, CreditCard, FileText, Image as ImageIcon, Loader2, Mail, Phone, Save, Trash2, Upload, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, Clock, CreditCard, FileText, Image as ImageIcon, Loader2, Mail, Phone, Plus, Save, Trash2, Upload, UserRound } from 'lucide-react';
 import { fetchApi, API_URL } from '../config/api';
 import { useClinic } from '../context/ClinicContext';
 
@@ -11,6 +11,7 @@ function PatientDocuments({ clientId }) {
   const [items, setItems] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = () => fetchApi(`/gallery/${clientId}`).then(setItems).catch((e) => setErr(e.message));
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [clientId]);
@@ -30,9 +31,9 @@ function PatientDocuments({ clientId }) {
     } catch (e2) { setErr(e2.message || 'Upload failed'); } finally { setBusy(false); }
   };
 
-  const del = async (item) => {
-    if (!window.confirm('Delete this file?')) return;
-    try { await fetchApi(`/gallery/${item.id}`, { method: 'DELETE' }); load(); }
+  const del = async () => {
+    if (!deleteTarget) return;
+    try { await fetchApi(`/gallery/${deleteTarget.id}`, { method: 'DELETE' }); setDeleteTarget(null); load(); }
     catch (e2) { setErr(e2.message); }
   };
 
@@ -63,20 +64,31 @@ function PatientDocuments({ clientId }) {
               </a>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-[11px] text-gray-400">{String(item.createdAt || '').slice(0, 10)}</span>
-                <button onClick={() => del(item)} className="rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                <button onClick={() => setDeleteTarget(item)} className="rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             </li>
           ))}
         </ul>
       )}
+      <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete File" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">Delete this uploaded file from the patient record?</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Keep File</Button>
+            <Button variant="danger" onClick={del}>Delete File</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
 import ToothPicker from '../components/clinical/ToothPicker';
 import WhatsAppActionButton from '../components/outreach/WhatsAppActionButton';
 import { MANUAL_WHATSAPP_TEMPLATES } from '../utils/whatsapp';
+import { invoicePrefillFromAppointment, invoicePrefillFromPatient, invoicePrefillSearch } from '../utils/invoicePrefill';
 
 const money = (value) => `PKR ${Number(value || 0).toLocaleString()}`;
 
@@ -103,6 +115,7 @@ function TreatmentPlan({ clientId, readOnly }) {
   const [form, setForm] = useState({ procedure: '', tooth: '', cost: '' });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const load = () => fetchApi(`/clients/${clientId}/treatment-plan`).then(setItems).catch((e) => setErr(e.message));
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [clientId]);
@@ -116,7 +129,14 @@ function TreatmentPlan({ clientId, readOnly }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   const setStatus = async (item, status) => { try { await fetchApi(`/treatment-plan/${item.id}`, { method: 'PUT', body: JSON.stringify({ status }) }); load(); } catch (e) { setErr(e.message); } };
-  const del = async (item) => { if (!window.confirm(`Remove this ${treatmentLabel.toLowerCase()}?`)) return; try { await fetchApi(`/treatment-plan/${item.id}`, { method: 'DELETE' }); load(); } catch (e) { setErr(e.message); } };
+  const del = async () => {
+    if (!deleteTarget) return;
+    try {
+      await fetchApi(`/treatment-plan/${deleteTarget.id}`, { method: 'DELETE' });
+      setDeleteTarget(null);
+      load();
+    } catch (e) { setErr(e.message); }
+  };
 
   const total = (items || []).filter((i) => i.status !== 'cancelled').reduce((s, i) => s + Number(i.cost || 0), 0);
   const fld = 'rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 px-2.5 py-1.5 text-sm dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-300';
@@ -145,7 +165,7 @@ function TreatmentPlan({ clientId, readOnly }) {
                   <select value={it.status} onChange={(e) => setStatus(it, e.target.value)} className={`${fld} text-xs`}>
                     {Object.entries(TP_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                   </select>
-                  <button onClick={() => del(it)} className="rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                  <button onClick={() => setDeleteTarget(it)} className="rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-3.5 w-3.5" /></button>
                 </>
               )}
             </div>
@@ -160,6 +180,15 @@ function TreatmentPlan({ clientId, readOnly }) {
         <input className={`${fld} w-28`} type="number" placeholder="Cost" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
         <Button size="sm" onClick={add} disabled={busy || !form.procedure.trim()}>Add</Button>
       </div>}
+      <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title={`Remove ${treatmentLabel}`} size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">Remove this {treatmentLabel.toLowerCase()} from the plan?</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Keep</Button>
+            <Button variant="danger" onClick={del}>Remove</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -207,6 +236,7 @@ function DentalProcedureDetails({ clientId, appointments, readOnly }) {
   const [form, setForm] = useState(emptyProcedure);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState(null);
 
   const load = () => fetchApi(`/clients/${clientId}/treatment-details`).then(res => {
     setItems(res.items || []);
@@ -240,10 +270,11 @@ function DentalProcedureDetails({ clientId, appointments, readOnly }) {
     }
   };
 
-  const remove = async (item) => {
-    if (!window.confirm(`Archive ${item.procedureType}?`)) return;
+  const remove = async () => {
+    if (!archiveTarget) return;
     try {
-      await fetchApi(`/treatment-details/${item.id}`, { method: 'DELETE' });
+      await fetchApi(`/treatment-details/${archiveTarget.id}`, { method: 'DELETE' });
+      setArchiveTarget(null);
       load();
     } catch (e) {
       setErr(e.message);
@@ -321,10 +352,19 @@ function DentalProcedureDetails({ clientId, appointments, readOnly }) {
               </p>
               <p className="text-xs text-gray-500">{String(item.performedAt || '').slice(0, 10)} - {item.staffName || doctorLabel}{item.followUpDate ? ` - follow-up ${item.followUpDate}` : ''}</p>
             </div>
-            {!readOnly && <button onClick={() => remove(item)} className="self-start rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600 sm:self-center"><Trash2 className="h-3.5 w-3.5" /></button>}
+            {!readOnly && <button onClick={() => setArchiveTarget(item)} className="self-start rounded p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-600 sm:self-center"><Trash2 className="h-3.5 w-3.5" /></button>}
           </div>
         ))}
       </div>
+      <Modal isOpen={!!archiveTarget} onClose={() => setArchiveTarget(null)} title="Archive Procedure" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-300">Archive {archiveTarget?.procedureType || 'this procedure'} from the visible procedure list?</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setArchiveTarget(null)}>Keep</Button>
+            <Button variant="danger" onClick={remove}>Archive</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -372,6 +412,121 @@ function TreatmentTimeline({ clientId }) {
   );
 }
 
+// Operational health flags — NOT a clinical record. These surface at-a-glance
+// risks (allergies, conditions the front desk/doctor should know before a
+// procedure). Stored in the ungated profileData blob, never in medicalHistory.
+const ALERT_CONDITIONS = [
+  'Diabetes', 'High Blood Pressure', 'Low Blood Pressure', 'Heart Trouble',
+  'Asthma', 'Hepatitis B/C', 'HIV/AIDS', 'TB', 'Rheumatic Fever', 'Epilepsy',
+  'Arthritis', 'Kidney Disease', 'Bleeding Disorder', 'Fainting During Treatment',
+  'Pacemaker', 'On Steroid Therapy', 'On Blood Thinners', 'Pregnant', 'Smoker',
+];
+
+function PatientAlerts({ client, onUpdated }) {
+  const initial = useMemo(() => {
+    const pd = (client?.profileData && typeof client.profileData === 'object')
+      ? client.profileData
+      : (() => { try { return JSON.parse(client?.profileData || '{}') || {}; } catch { return {}; } })();
+    return {
+      conditions: Array.isArray(pd.alertConditions) ? pd.alertConditions : [],
+      allergies: pd.allergies || '',
+      note: pd.alertNote || '',
+    };
+  }, [client?.profileData]);
+
+  const [editing, setEditing] = useState(false);
+  const [conditions, setConditions] = useState(initial.conditions);
+  const [allergies, setAllergies] = useState(initial.allergies);
+  const [note, setNote] = useState(initial.note);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    setConditions(initial.conditions); setAllergies(initial.allergies); setNote(initial.note);
+  }, [initial]);
+
+  const toggle = (c) => setConditions(curr => curr.includes(c) ? curr.filter(x => x !== c) : [...curr, c]);
+
+  const save = async () => {
+    setBusy(true); setErr('');
+    try {
+      // Merge into existing profileData so template fields aren't clobbered.
+      const pd = (client?.profileData && typeof client.profileData === 'object')
+        ? { ...client.profileData }
+        : (() => { try { return JSON.parse(client?.profileData || '{}') || {}; } catch { return {}; } })();
+      pd.alertConditions = conditions;
+      pd.allergies = allergies.trim();
+      pd.alertNote = note.trim();
+      const updated = await fetchApi(`/clients/${client.id}`, { method: 'PUT', body: JSON.stringify({ profileData: pd }) });
+      onUpdated?.(updated);
+      setEditing(false);
+    } catch (e) { setErr(e.message || 'Could not save alerts.'); }
+    finally { setBusy(false); }
+  };
+
+  const hasAny = initial.conditions.length > 0 || initial.allergies || initial.note;
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-black text-gray-900 dark:text-white">
+          <AlertTriangle className="h-4 w-4 text-amber-500" /> Patient Alerts
+        </h3>
+        {!editing && (
+          <button onClick={() => setEditing(true)} className="text-xs font-bold text-[var(--primary)]">{hasAny ? 'Edit' : 'Add'}</button>
+        )}
+      </div>
+      <p className="mt-1 text-[11px] text-gray-400">Quick-reference health flags for staff. Not a medical record.</p>
+
+      {!editing ? (
+        <div className="mt-3 space-y-2">
+          {!hasAny && <p className="text-xs text-gray-400">No alerts recorded.</p>}
+          {initial.allergies && (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-300">
+              Allergies: {initial.allergies}
+            </div>
+          )}
+          {initial.conditions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {initial.conditions.map(c => (
+                <span key={c} className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">{c}</span>
+              ))}
+            </div>
+          )}
+          {initial.note && <p className="text-xs text-gray-600 dark:text-gray-300">{initial.note}</p>}
+        </div>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-300 mb-1">Allergies (e.g. Penicillin, Latex)</label>
+            <input value={allergies} onChange={e => setAllergies(e.target.value)} placeholder="Type allergies..." className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-white" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-300 mb-1">Conditions</label>
+            <div className="flex flex-wrap gap-1.5">
+              {ALERT_CONDITIONS.map(c => (
+                <button key={c} type="button" onClick={() => toggle(c)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition ${conditions.includes(c) ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300'}`}>
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-300 mb-1">Other note</label>
+            <input value={note} onChange={e => setNote(e.target.value)} placeholder="Any other medical note..." className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-white" />
+          </div>
+          {err && <p className="text-xs font-semibold text-red-600">{err}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" onClick={save} disabled={busy}><Save className="h-4 w-4" /> {busy ? 'Saving...' : 'Save'}</Button>
+            <Button size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ClientProfile() {
   const { term, features, industryTemplate, capability } = useClinic();
   const patientLabel = term('patient', 'Patient');
@@ -411,6 +566,9 @@ export default function ClientProfile() {
     try { return JSON.parse(client?.profileData || '{}') || {}; } catch { return {}; }
   }, [client?.profileData]);
   const templateProfileFields = (industryTemplate.config.profile?.fields || []).filter(field => !['name', 'phone', 'email', 'notes', 'gender', 'dob'].includes(field.key));
+  const alertConditions = Array.isArray(profileData.alertConditions) ? profileData.alertConditions : [];
+  const alertAllergies = profileData.allergies || '';
+  const hasAlerts = alertConditions.length > 0 || alertAllergies;
 
   if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-indigo-500" /></div>;
   if (error || !client) {
@@ -422,6 +580,11 @@ export default function ClientProfile() {
     );
   }
 
+  const openInvoice = (prefill) => {
+    const search = invoicePrefillSearch(prefill);
+    navigate({ pathname: '/invoices', search: search ? `?${search}` : '' }, { state: { invoicePrefill: prefill } });
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -430,14 +593,31 @@ export default function ClientProfile() {
         </button>
         <div className="flex flex-wrap gap-2">
           <WhatsAppActionButton client={client} template={MANUAL_WHATSAPP_TEMPLATES.find(t => t.key === 'follow_up')} />
+          <Button size="sm" variant="secondary" onClick={() => openInvoice(invoicePrefillFromPatient(client, 'patient_profile'))}>
+            <FileText className="h-4 w-4" /> Create Invoice
+          </Button>
           <Button size="sm" onClick={() => navigate('/appointments')}>
             <Calendar className="h-4 w-4" /> Book {appointmentLabel}
           </Button>
         </div>
       </div>
 
+      {hasAlerts && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-500/30 dark:bg-red-500/10">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+          <span className="text-xs font-black uppercase tracking-wide text-red-700 dark:text-red-300">Medical Alert</span>
+          {alertAllergies && (
+            <span className="rounded-full bg-red-600 px-2.5 py-1 text-[11px] font-bold text-white">Allergy: {alertAllergies}</span>
+          )}
+          {alertConditions.map(c => (
+            <span key={c} className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-red-700 shadow-sm dark:bg-white/10 dark:text-red-200">{c}</span>
+          ))}
+        </div>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
         <aside className="space-y-4">
+          <PatientAlerts client={client} onUpdated={setClient} />
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
             <div className="text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl text-xl font-black text-white" style={{ background: client.avatarColor || '#0f766e' }}>
@@ -506,6 +686,13 @@ export default function ClientProfile() {
                     <p className="text-xs text-gray-500">{appt.date} · {appt.startTime} · {appt.staff?.name || appt.staffName || staffLabel}</p>
                   </div>
                   <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => openInvoice(invoicePrefillFromAppointment(appt, 'patient_profile'))}
+                      className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-bold text-gray-600 transition hover:border-[var(--primary)] hover:text-[var(--primary)] dark:border-white/10 dark:text-gray-300"
+                    >
+                      Invoice
+                    </button>
                     {appt.status && <Badge label={appt.status} variant={appt.status} />}
                     <span className="text-xs font-black text-gray-950 dark:text-white">{money(appt.price)}</span>
                   </div>

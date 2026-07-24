@@ -1,7 +1,7 @@
 {
-  "name": "The Smile Expert Portal",
-  "short_name": "Smile Expert",
-  "description": "Dental clinic portal for patients, appointments, billing, staff, and operations.",
+  "name": "Crea8iv PatientFlow",
+  "short_name": "PatientFlow",
+  "description": "Clinic portal for appointments, billing, staff, and operations.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
@@ -11,9 +11,9 @@
   "categories": ["medical", "business", "productivity"],
   "icons": [
     {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "crea8iv.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

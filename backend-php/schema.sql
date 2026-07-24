@@ -238,6 +238,7 @@ CREATE TABLE `Appointment` (
   `price` DOUBLE NOT NULL,
   `specialty` VARCHAR(100) NOT NULL,
   `eventType` VARCHAR(80) NOT NULL DEFAULT 'appointment',
+  `source` VARCHAR(60) DEFAULT NULL,
   `checkedIn` TINYINT(1) NOT NULL DEFAULT 0,
   `checkinTime` DATETIME DEFAULT NULL,
   `qrCode` TEXT DEFAULT NULL,

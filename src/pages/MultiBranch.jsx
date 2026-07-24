@@ -9,6 +9,7 @@ const emptyForm = { name: '', address: '', phone: '', isActive: true };
 
 function BranchModal({ isOpen, onClose, onSave, branch, saving }) {
   const [form, setForm] = useState(emptyForm);
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     setForm(branch ? {
@@ -17,20 +18,27 @@ function BranchModal({ isOpen, onClose, onSave, branch, saving }) {
       phone: branch.phone || '',
       isActive: branch.isActive !== false,
     } : emptyForm);
+    setValidationError('');
   }, [branch, isOpen]);
 
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
   const submit = () => {
     if (!form.name.trim()) {
-      alert('Branch name is required.');
+      setValidationError('Branch name is required.');
       return;
     }
+    setValidationError('');
     onSave({ ...form, name: form.name.trim(), address: form.address.trim(), phone: form.phone.trim() });
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={branch ? `Edit ${branch.name}` : 'Add Branch'} size="md">
       <div className="space-y-4">
+        {validationError && (
+          <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+            {validationError}
+          </div>
+        )}
         <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200">
           Branch Name
           <input className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] dark:border-white/10 dark:bg-slate-900"
@@ -67,8 +75,10 @@ export default function MultiBranch() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editBranch, setEditBranch] = useState(null);
+  const [deleteBranchTarget, setDeleteBranchTarget] = useState(null);
 
   const loadBranches = async () => {
     setLoading(true);
@@ -93,6 +103,8 @@ export default function MultiBranch() {
 
   const saveBranch = async (payload) => {
     setSaving(true);
+    setError('');
+    setNotice('');
     try {
       if (editBranch) {
         await fetchApi(`/branches/${editBranch.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -103,20 +115,23 @@ export default function MultiBranch() {
       setEditBranch(null);
       await loadBranches();
     } catch (err) {
-      alert(err.message || 'Branch could not be saved.');
+      setError(err.message || 'Branch could not be saved.');
     } finally {
       setSaving(false);
     }
   };
 
-  const deleteBranch = async (branch) => {
-    if (!confirm(`Delete ${branch.name}? If it has linked records it will be deactivated to preserve history.`)) return;
+  const deleteBranch = async () => {
+    if (!deleteBranchTarget) return;
+    setError('');
+    setNotice('');
     try {
-      const result = await fetchApi(`/branches/${branch.id}`, { method: 'DELETE' });
+      const result = await fetchApi(`/branches/${deleteBranchTarget.id}`, { method: 'DELETE' });
+      setDeleteBranchTarget(null);
       await loadBranches();
-      if (result?.deactivated) alert(result.message);
+      if (result?.deactivated) setNotice(result.message || 'Branch has linked records, so it was deactivated instead of deleted.');
     } catch (err) {
-      alert(err.message || 'Branch could not be deleted.');
+      setError(err.message || 'Branch could not be deleted.');
     }
   };
 
@@ -134,6 +149,7 @@ export default function MultiBranch() {
       </div>
 
       {error && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {notice && <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">{notice}</div>}
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {[
@@ -190,7 +206,7 @@ export default function MultiBranch() {
                         <button onClick={() => { setEditBranch(branch); setShowForm(true); }} className="rounded-lg p-2 text-gray-400 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]" title="Edit">
                           <Edit2 className="h-4 w-4" />
                         </button>
-                        <button onClick={() => deleteBranch(branch)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600" title="Delete">
+                        <button onClick={() => setDeleteBranchTarget(branch)} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600" title="Delete">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
@@ -204,6 +220,20 @@ export default function MultiBranch() {
       </div>
 
       <BranchModal isOpen={showForm} onClose={() => { setShowForm(false); setEditBranch(null); }} onSave={saveBranch} branch={editBranch} saving={saving} />
+      <Modal isOpen={!!deleteBranchTarget} onClose={() => setDeleteBranchTarget(null)} title="Delete Branch" size="sm">
+        <div className="space-y-4">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+            <p className="text-sm font-bold">Delete or deactivate this branch?</p>
+            <p className="mt-1 text-xs leading-5">
+              {deleteBranchTarget?.name} will be deleted when possible. If it has linked records, the backend will deactivate it to preserve history.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDeleteBranchTarget(null)}>Cancel</Button>
+            <Button variant="danger" onClick={deleteBranch}><Trash2 className="h-4 w-4" /> Continue</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

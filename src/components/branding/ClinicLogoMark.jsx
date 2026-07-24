@@ -14,7 +14,7 @@ export default function ClinicLogoMark({
         <img
           src={logo}
           alt={alt}
-          className={imageClassName || 'w-full h-full object-cover'}
+          className={imageClassName || 'w-full h-full object-contain'}
         />
       ) : (
         <span className={textClassName}>{getLogoInitials(logo)}</span>

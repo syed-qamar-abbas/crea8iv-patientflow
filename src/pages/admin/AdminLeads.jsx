@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Plus, ArrowRightCircle, X } from 'lucide-react';
 import { fetchApi } from '../../config/api';
+import Modal from '../../components/ui/Modal';
 
 const STATUSES = ['new', 'contacted', 'demo_given', 'payment_pending', 'payment_review', 'converted', 'rejected'];
 
@@ -18,12 +19,103 @@ const inputCls = 'w-full px-3 py-2 rounded-lg border border-gray-200 dark:border
 
 const EMPTY_FORM = { clinicName: '', contactName: '', email: '', phone: '', whatsapp: '', city: '', clinicType: 'dental', branches: 1 };
 
+function LeadConvertModal({ lead, busy, onClose, onConfirm }) {
+  return (
+    <Modal isOpen={!!lead} onClose={onClose} title="Convert Lead" size="sm">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
+          <p className="text-sm font-bold">{lead?.clinicName}</p>
+          <p className="mt-1 text-xs leading-5">This creates a clinic account and generates a temporary owner password for admin handover.</p>
+        </div>
+        <div className="rounded-xl bg-gray-50 p-3 text-xs dark:bg-white/5">
+          <div className="flex justify-between gap-3">
+            <span className="text-gray-500">Contact</span>
+            <span className="font-bold text-gray-900 dark:text-white">{lead?.contactName}</span>
+          </div>
+          <div className="mt-1 flex justify-between gap-3">
+            <span className="text-gray-500">Email</span>
+            <span className="break-all font-bold text-gray-900 dark:text-white">{lead?.email}</span>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={busy} className="rounded-lg px-3 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 disabled:opacity-60 dark:text-gray-300 dark:hover:bg-white/10">Cancel</button>
+          <button type="button" onClick={onConfirm} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60">
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Convert
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function LeadCredentialModal({ result, onClose }) {
+  const [copied, setCopied] = useState('');
+  if (!result) return null;
+  const rows = [
+    ['username', 'Username', result.ownerUsername],
+    ['password', 'Password', result.ownerPassword],
+    ['email', 'Contact email', result.ownerEmail],
+  ];
+  const credentialText = [
+    result.message || 'Clinic created.',
+    '',
+    'Owner login',
+    `Username: ${result.ownerUsername || ''}`,
+    `Password: ${result.ownerPassword || ''}`,
+    `Contact email: ${result.ownerEmail || ''}`,
+  ].join('\n');
+
+  const copy = async (key, value) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
+      setTimeout(() => setCopied(''), 1500);
+    } catch (_) {
+      setCopied('');
+    }
+  };
+
+  return (
+    <Modal isOpen={!!result} onClose={onClose} title="Lead Converted" size="md">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100">
+          <p className="text-sm font-bold">{result.message || 'Clinic created successfully.'}</p>
+          <p className="mt-1 text-xs leading-5">Copy these owner credentials for the clinic handover.</p>
+        </div>
+        <div className="grid gap-2">
+          {rows.map(([key, label, value]) => (
+            <div key={key} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-white/10 dark:bg-white/5">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
+                <p className="break-all font-mono text-sm font-bold text-gray-900 dark:text-white">{value || '—'}</p>
+              </div>
+              {value && (
+                <button type="button" onClick={() => copy(key, value)} className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:border-orange-300 hover:text-orange-600 dark:border-white/10 dark:bg-slate-900 dark:text-gray-300">
+                  {copied === key ? 'Copied' : 'Copy'}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => copy('all', credentialText)} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-600 hover:border-orange-300 hover:text-orange-600 dark:border-white/10 dark:text-gray-300">{copied === 'all' ? 'Copied All' : 'Copy All'}</button>
+          <button type="button" onClick={onClose} className="rounded-lg bg-orange-600 px-3 py-2 text-xs font-bold text-white hover:bg-orange-700">Done</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function AdminLeads() {
   const [leads, setLeads] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [convertLead, setConvertLead] = useState(null);
+  const [convertedResult, setConvertedResult] = useState(null);
 
   const load = () => fetchApi('/admin/leads').then(setLeads).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
@@ -40,15 +132,14 @@ export default function AdminLeads() {
     }
   };
 
-  const convert = async (lead) => {
-    if (!window.confirm(`Convert "${lead.clinicName}" into a clinic? A temporary owner password will be generated and saved for admin handover.`)) return;
-    setBusy(lead.id);
+  const convert = async () => {
+    if (!convertLead) return;
+    setBusy(convertLead.id);
     setError('');
     try {
-      const res = await fetchApi(`/admin/leads/${lead.id}/convert`, { method: 'POST' });
-      if (res.ownerPassword) {
-        window.alert(`${res.message || 'Clinic created.'}\n\nOwner login\nUsername: ${res.ownerUsername}\nPassword: ${res.ownerPassword}\nContact email: ${res.ownerEmail}`);
-      }
+      const res = await fetchApi(`/admin/leads/${convertLead.id}/convert`, { method: 'POST' });
+      setConvertLead(null);
+      setConvertedResult(res);
       await load();
     } catch (e) {
       setError(e.message);
@@ -162,7 +253,7 @@ export default function AdminLeads() {
                 <td className="px-4 py-3 text-right">
                   {lead.status !== 'converted' && lead.status !== 'rejected' && (
                     <button
-                      onClick={() => convert(lead)}
+                      onClick={() => setConvertLead(lead)}
                       disabled={busy === lead.id}
                       className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
                     >
@@ -176,6 +267,16 @@ export default function AdminLeads() {
           </tbody>
         </table>
       </div>
+      <LeadConvertModal
+        lead={convertLead}
+        busy={busy === convertLead?.id}
+        onClose={() => setConvertLead(null)}
+        onConfirm={convert}
+      />
+      <LeadCredentialModal
+        result={convertedResult}
+        onClose={() => setConvertedResult(null)}
+      />
     </div>
   );
 }

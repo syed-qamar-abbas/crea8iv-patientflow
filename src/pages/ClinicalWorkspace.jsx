@@ -20,16 +20,18 @@ function Stat({ label, value, icon: Icon }) {
   );
 }
 
-function TemplatePipelineBoard({ clients, setClients, template, term }) {
+function TemplatePipelineBoard({ clients, clientsTotal, setClients, template, term }) {
   const stages = template.config.workflow?.stages || ['new', 'active', 'closed'];
   const [movingId, setMovingId] = useState('');
+  const [error, setError] = useState('');
   const move = async (client, workflowStage) => {
     setMovingId(client.id);
+    setError('');
     try {
       await fetchApi(`/clients/${client.id}`, { method: 'PUT', body: JSON.stringify({ workflowStage }) });
       setClients(current => current.map(item => item.id === client.id ? { ...item, workflowStage } : item));
     } catch (err) {
-      alert(`Stage update failed: ${err.message}`);
+      setError(`Stage update failed: ${err.message}`);
     } finally {
       setMovingId('');
     }
@@ -44,9 +46,14 @@ function TemplatePipelineBoard({ clients, setClients, template, term }) {
           <p className="mt-1 text-sm text-gray-500">Move {term('patients', 'records').toLowerCase()} through the template-defined workflow without changing historical data.</p>
         </div>
         <div className="rounded-xl bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
-          {clients.length} {term('patients', 'records').toLowerCase()}
+          {clientsTotal ?? clients.length} {term('patients', 'records').toLowerCase()}
         </div>
       </div>
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          {error}
+        </div>
+      )}
       <div className="flex gap-4 overflow-x-auto pb-4">
         {stages.map((stage, index) => {
           const items = clients.filter(client => (client.workflowStage || stages[0]) === stage);
@@ -94,6 +101,7 @@ export default function ClinicalWorkspace() {
   const servicesLabel = term('services', 'Services');
   const [appointments, setAppointments] = useState([]);
   const [clients, setClients] = useState([]);
+  const [clientsTotal, setClientsTotal] = useState(null);
   const [staff, setStaff] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -108,6 +116,7 @@ export default function ClinicalWorkspace() {
     ]).then(([appt, clientData, staffData, serviceData]) => {
       setAppointments(Array.isArray(appt) ? appt : []);
       setClients(Array.isArray(clientData) ? clientData : (clientData.clients || []));
+      setClientsTotal(Array.isArray(clientData) ? clientData.length : (clientData.total ?? null));
       setStaff(Array.isArray(staffData) ? staffData : []);
       setServices(Array.isArray(serviceData) ? serviceData : []);
     }).catch((err) => setError(err.message)).finally(() => setLoading(false));
@@ -119,16 +128,18 @@ export default function ClinicalWorkspace() {
     return {
       today: activeAppts.filter((a) => a.date === today).length,
       completed: activeAppts.filter((a) => a.status === 'completed').length,
-      activePatients: clients.filter((c) => c.status === 'active').length,
+      // /clients returns one page (default 50) — use the server total so this
+      // doesn't plateau at the page size on larger clinics.
+      activePatients: clientsTotal ?? clients.filter((c) => c.status === 'active').length,
       activeStaff: staff.filter((s) => s.status === 'active').length,
       plannedRevenue: activeAppts.reduce((sum, a) => sum + Number(a.price || 0), 0),
     };
-  }, [appointments, clients, staff, today]);
+  }, [appointments, clients, clientsTotal, staff, today]);
 
   if (loading) return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-indigo-500" /></div>;
 
   if (capability('pipeline')) {
-    return <TemplatePipelineBoard clients={clients} setClients={setClients} template={industryTemplate} term={term} />;
+    return <TemplatePipelineBoard clients={clients} clientsTotal={clientsTotal} setClients={setClients} template={industryTemplate} term={term} />;
   }
 
   return (
