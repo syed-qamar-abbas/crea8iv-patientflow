@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Calendar, Clock, CreditCard, FileText, Image as ImageIcon, Loader2, Mail, Phone, Plus, Save, Trash2, Upload, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Calendar, Clock, CreditCard, Download, FileText, Image as ImageIcon, Loader2, Mail, Phone, Plus, Save, Trash2, Upload, UserRound } from 'lucide-react';
 import { fetchApi, API_URL } from '../config/api';
 import { useClinic } from '../context/ClinicContext';
 
@@ -527,6 +527,53 @@ function PatientAlerts({ client, onUpdated }) {
   );
 }
 
+function PrescriptionHistory({ clientId, clientName }) {
+  const navigate = useNavigate();
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState('');
+
+  const load = () => fetchApi(`/prescriptions?clientId=${clientId}`).then(r => setItems(Array.isArray(r) ? r : [])).catch(e => setErr(e.message));
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [clientId]);
+
+  const downloadPdf = async (rx) => {
+    try {
+      const token = localStorage.getItem('clinic_token');
+      const res = await fetch(`${API_URL}/prescriptions/${rx.id}/pdf?t=${Date.now()}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      if (!res.ok) throw new Error('PDF failed');
+      const u = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a'); a.href = u; a.download = `${rx.prescriptionNo || 'prescription'}.pdf`; a.click();
+      setTimeout(() => URL.revokeObjectURL(u), 10000);
+    } catch (e) { setErr(e.message); }
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-black text-gray-950 dark:text-white"><FileText className="h-4 w-4" /> Prescriptions</h3>
+        <button onClick={() => navigate(`/prescriptions?new=1&clientId=${clientId}`)} className="flex items-center gap-1 text-xs font-bold text-[var(--primary)]"><Plus className="h-3.5 w-3.5" /> New Prescription</button>
+      </div>
+      {err && <p className="mt-2 text-xs text-rose-600">{err}</p>}
+      {items === null ? (
+        <div className="py-4 text-center"><Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400" /></div>
+      ) : items.length === 0 ? (
+        <p className="mt-3 text-xs text-gray-400">No prescriptions yet for {clientName || 'this patient'}.</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {items.map(rx => (
+            <div key={rx.id} className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 dark:bg-white/5">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-bold text-gray-800 dark:text-gray-100">{rx.prescriptionNo} · {rx.date}</p>
+                <p className="truncate text-[11px] text-gray-500">{rx.diagnosis || `${(rx.medicines || []).length} medicine(s)`}</p>
+              </div>
+              <button onClick={() => downloadPdf(rx)} title="Download PDF" className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><Download className="h-3.5 w-3.5" /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ClientProfile() {
   const { term, features, industryTemplate, capability } = useClinic();
   const patientLabel = term('patient', 'Patient');
@@ -715,6 +762,8 @@ export default function ClientProfile() {
               <TreatmentTimeline clientId={client.id} />
             </>
           )}
+
+          <PrescriptionHistory clientId={client.id} clientName={client.name} />
 
           <PatientDocuments clientId={client.id} />
         </main>

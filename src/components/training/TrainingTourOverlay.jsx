@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle2, X } from 'lucide-react';
 import Button from '../ui/Button';
 import { useTraining } from '../../context/TrainingContext';
@@ -74,6 +74,51 @@ export default function TrainingTourOverlay() {
     };
   }, [activeStep]);
 
+  // Auto-advance when the user actually interacts with the highlighted element,
+  // so the tour keeps pace with them instead of needing manual "Next" clicks.
+  // We retry attaching because a step's target may only appear once the user
+  // opens a modal from the previous step.
+  const nextStepRef = useRef(nextStep);
+  nextStepRef.current = nextStep;
+  useEffect(() => {
+    if (!activeStep?.selector) return undefined;
+    let advanced = false;
+    let advanceTimer = null;
+    let boundTarget = null;
+
+    const onInteract = () => {
+      if (advanced) return;
+      advanced = true;
+      // Let the element's own click run first (open the modal / navigate),
+      // then move the tour forward.
+      advanceTimer = window.setTimeout(() => nextStepRef.current?.(), 400);
+    };
+
+    const attach = () => {
+      // Prefer the visible match (same node the spotlight highlights), but fall
+      // back to any DOM match: field wrappers can compute to width:0 in a grid,
+      // which getVisibleTarget rejects — yet real clicks still bubble to them.
+      const target = getVisibleTarget(activeStep.selector) || document.querySelector(activeStep.selector);
+      if (!target || target === boundTarget) return !!boundTarget;
+      if (boundTarget) boundTarget.removeEventListener('click', onInteract);
+      boundTarget = target;
+      target.addEventListener('click', onInteract);
+      return true;
+    };
+
+    attach();
+    // Poll briefly so targets that render after a modal opens still get bound.
+    const iv = window.setInterval(attach, 300);
+    const stopPoll = window.setTimeout(() => window.clearInterval(iv), 6000);
+
+    return () => {
+      window.clearInterval(iv);
+      window.clearTimeout(stopPoll);
+      if (advanceTimer) window.clearTimeout(advanceTimer);
+      if (boundTarget) boundTarget.removeEventListener('click', onInteract);
+    };
+  }, [activeStep]);
+
   const cardStyle = useMemo(() => {
     if (!targetRect) {
       return {
@@ -102,10 +147,14 @@ export default function TrainingTourOverlay() {
 
   return (
     <div className="fixed inset-0 z-[70] pointer-events-none">
-      <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-[1px]" />
+      {/* When a step highlights an element, the spotlight's own ring-shadow below
+          dims the backdrop with a clear cut-out — so we skip the full-screen
+          overlay (and its blur) to keep the highlighted field crisp. A light dim
+          only shows on steps with no specific target. */}
+      {!targetRect && <div className="absolute inset-0 bg-slate-950/30" />}
       {targetRect && (
         <div
-          className="absolute rounded-xl border-2 border-white shadow-[0_0_0_9999px_rgba(15,23,42,0.45),0_0_0_6px_rgba(20,184,166,0.35)] transition-all duration-200"
+          className="absolute rounded-xl border-2 border-white shadow-[0_0_0_9999px_rgba(15,23,42,0.32),0_0_0_5px_rgba(20,184,166,0.45)] transition-all duration-200"
           style={{
             top: targetRect.top - 8,
             left: targetRect.left - 8,

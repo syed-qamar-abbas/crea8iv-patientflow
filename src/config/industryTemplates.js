@@ -52,7 +52,7 @@ const baseConfig = {
   navigation: {
     groups: [
       { key: 'main', label: 'Main Menu', modules: ['dashboard', 'reception', 'appointments', 'clients', 'clinical', 'staff', 'services', 'financials'] },
-      { key: 'billing', label: 'Billing & Packages', modules: ['packages', 'invoices'] },
+      { key: 'billing', label: 'Billing & Packages', modules: ['packages', 'invoices', 'prescriptions'] },
       { key: 'operations', label: 'Operations', modules: ['lab', 'inventory', 'gallery', 'feedback'] },
       { key: 'growth', label: 'Growth', modules: ['marketing', 'outreach', 'whatsapp', 'ai', 'aiReceptionist', 'metaLeads', 'imports', 'reports', 'branches'] },
       { key: 'admin', label: 'Admin', modules: ['audit', 'support', 'settings'] },

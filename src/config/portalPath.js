@@ -19,7 +19,7 @@ const RESERVED_FIRST_SEGMENTS = new Set([
   'dashboard', 'reception', 'appointments', 'clients', 'clinical', 'lab', 'staff',
   'services', 'financials', 'settings', 'packages', 'invoices', 'inventory', 'gallery',
   'feedback', 'marketing', 'whatsapp', 'reports', 'audit', 'branches', 'ai',
-  'ai-receptionist', 'meta-leads', 'imports', 'support',
+  'ai-receptionist', 'meta-leads', 'imports', 'support', 'prescriptions',
   // build assets (served as files, but guard anyway)
   'assets', 'index.html',
 ]);

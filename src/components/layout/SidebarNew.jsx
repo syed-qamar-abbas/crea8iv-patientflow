@@ -4,7 +4,7 @@ import {
   DollarSign, Settings, ChevronLeft, ChevronRight,
   Package, Receipt, Archive, Image, MessageSquare,
   Megaphone, Shield, Building2, ClipboardList, FileBarChart,
-  MessageCircle, Bot, Facebook, Database, LifeBuoy, FlaskConical, Sparkles,
+  MessageCircle, Bot, Facebook, Database, LifeBuoy, FlaskConical, Sparkles, FileText,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useClinic } from '../../context/ClinicContext';
@@ -31,6 +31,7 @@ export const navGroups = [
     items: [
       { to: '/packages', icon: Package, label: 'Packages' },
       { to: '/invoices', icon: Receipt, label: 'Invoices' },
+      { to: '/prescriptions', icon: FileText, label: 'Prescriptions' },
     ],
   },
   {
@@ -86,6 +87,7 @@ export const MODULE_KEYS = {
   '/financials': 'financials',
   '/packages': 'packages',
   '/invoices': 'invoices',
+  '/prescriptions': 'prescriptions',
   '/lab': 'lab',
   '/inventory': 'inventory',
   '/gallery': 'gallery',
@@ -113,6 +115,25 @@ export function getEffectiveNavGroups(features, industryTemplate, role) {
     items: (group.modules || []).map(moduleKey => allNavItems.find(item => MODULE_KEYS[item.to] === moduleKey)).filter(Boolean),
   }));
   const baseGroups = navigationGroups.length ? navigationGroups : navGroups;
+
+  // A clinic's stored template navigation is a point-in-time snapshot, so it can
+  // predate newly-shipped core modules (e.g. Prescriptions) and silently hide
+  // them. Backfill any default nav item that isn't listed anywhere, into the
+  // group with a matching label — so new modules appear without a per-clinic
+  // data migration. (Access/feature/visibility filters below still apply.)
+  if (navigationGroups.length) {
+    const present = new Set(baseGroups.flatMap(g => g.items.map(i => i.to)));
+    navGroups.forEach(defGroup => {
+      defGroup.items.forEach(item => {
+        if (present.has(item.to)) return;
+        const target = baseGroups.find(g => g.label === defGroup.label);
+        if (target) target.items.push(item);
+        else baseGroups.push({ label: defGroup.label, items: [item] });
+        present.add(item.to);
+      });
+    });
+  }
+
   return baseGroups.map(group => ({
     ...group,
     items: group.items.filter((item) => {

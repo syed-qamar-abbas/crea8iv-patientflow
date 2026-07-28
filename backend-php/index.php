@@ -316,6 +316,14 @@ $routes = [
     ['PATCH', '^api/v1/users/([^/]+)$', 'UserController', 'update', ['owner']],
     ['DELETE', '^api/v1/users/([^/]+)$', 'UserController', 'remove', ['owner']],
 
+    // Prescriptions Routes
+    ['GET', '^api/v1/prescriptions$', 'PrescriptionController', 'list', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
+    ['POST', '^api/v1/prescriptions$', 'PrescriptionController', 'create', ['owner', 'manager', 'doctor', 'therapist']],
+    ['GET', '^api/v1/prescriptions/([^/]+)/pdf$', 'PrescriptionController', 'getPDF', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
+    ['GET', '^api/v1/prescriptions/([^/]+)$', 'PrescriptionController', 'getById', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
+    ['PUT', '^api/v1/prescriptions/([^/]+)$', 'PrescriptionController', 'update', ['owner', 'manager', 'doctor', 'therapist']],
+    ['DELETE', '^api/v1/prescriptions/([^/]+)$', 'PrescriptionController', 'remove', ['owner', 'manager', 'doctor']],
+
     // Clients Routes
     ['GET', '^api/v1/clients$', 'ClientController', 'list', ['owner', 'manager', 'doctor', 'therapist', 'accountant', 'receptionist', 'staff']],
     ['POST', '^api/v1/clients$', 'ClientController', 'create', ['owner', 'manager', 'receptionist']],

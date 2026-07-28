@@ -34,6 +34,7 @@ import Settings from './pages/Settings';
 // New pages
 import Packages from './pages/Packages';
 import Invoices from './pages/Invoices';
+import Prescriptions from './pages/Prescriptions';
 import Inventory from './pages/Inventory';
 import Gallery from './pages/Gallery';
 import Feedback from './pages/Feedback';
@@ -176,6 +177,7 @@ export default function AppNew() {
               {/* New routes */}
               <Route path="packages" element={<RoleRoute path="packages"><Packages /></RoleRoute>} />
               <Route path="invoices" element={<RoleRoute path="invoices"><Invoices /></RoleRoute>} />
+              <Route path="prescriptions" element={<RoleRoute path="prescriptions"><Prescriptions /></RoleRoute>} />
               <Route path="inventory" element={<RoleRoute path="inventory"><Inventory /></RoleRoute>} />
               <Route path="gallery" element={<RoleRoute path="gallery"><Gallery /></RoleRoute>} />
               <Route path="feedback" element={<RoleRoute path="feedback"><Feedback /></RoleRoute>} />
