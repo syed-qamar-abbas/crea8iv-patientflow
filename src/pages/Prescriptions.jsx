@@ -318,20 +318,38 @@ export default function Prescriptions() {
   const openEdit = (rx) => { setEditRx(rx); setDuplicateFrom(null); setShowForm(true); };
   const openDuplicate = (rx) => { setDuplicateFrom(rx); setEditRx(null); setShowForm(true); };
 
-  const fetchPdfBlobUrl = async (rx) => {
+  const fetchPdfBlob = async (rx) => {
     const token = localStorage.getItem('clinic_token');
     const response = await fetch(`${API_URL}/prescriptions/${rx.id}/pdf?t=${Date.now()}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
     if (!response.ok) { let m = 'PDF could not be generated.'; try { const j = await response.json(); if (j.error) m = j.error; } catch (_) {} throw new Error(m); }
-    return URL.createObjectURL(await response.blob());
+    return response.blob();
   };
+  const fetchPdfBlobUrl = async (rx) => URL.createObjectURL(await fetchPdfBlob(rx));
   const downloadPdf = async (rx) => { try { const u = await fetchPdfBlobUrl(rx); const a = document.createElement('a'); a.href = u; a.download = `${rx.prescriptionNo || 'prescription'}.pdf`; a.click(); setTimeout(() => URL.revokeObjectURL(u), 10000); } catch (e) { setError(e.message); } };
   const printPdf = async (rx) => { try { const u = await fetchPdfBlobUrl(rx); const w = window.open(u, '_blank'); if (w) w.addEventListener('load', () => { try { w.print(); } catch (_) {} }); setTimeout(() => URL.revokeObjectURL(u), 60000); } catch (e) { setError(e.message); } };
-  const sendWhatsapp = (rx) => {
+
+  // WhatsApp share WITHOUT the Business API:
+  // • Mobile/tablet — the native OS share sheet with the PDF already attached, so
+  //   the user just picks WhatsApp + the patient and hits send (one real step).
+  // • Desktop (no file-share support) — download the PDF (ready to attach) and
+  //   open the WhatsApp chat with a prefilled message.
+  const sendWhatsapp = async (rx) => {
     let phone = (rx.clientPhone || '').replace(/\D/g, '');
-    if (!phone) return setError(`No WhatsApp number for this ${patientLabel.toLowerCase()}.`);
     if (phone.startsWith('0')) phone = '92' + phone.slice(1);
     const msg = `Hi ${rx.clientName || patientLabel}, please find your prescription (${rx.prescriptionNo}) from ${rx.date}. Kindly follow the dosage and instructions as advised.`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    let blob;
+    try { blob = await fetchPdfBlob(rx); } catch (e) { return setError(e.message); }
+    const file = new File([blob], `${rx.prescriptionNo || 'prescription'}.pdf`, { type: 'application/pdf' });
+    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: rx.prescriptionNo || 'Prescription', text: msg }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; /* not supported/blocked → fall back */ }
+    }
+    // Fallback: download the PDF, then open the WhatsApp chat to attach it.
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = file.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    else setError(`No WhatsApp number for this ${patientLabel.toLowerCase()}. The PDF was downloaded so you can attach it manually.`);
   };
   const cancelRx = async (rx) => {
     if (!confirm(`Cancel prescription ${rx.prescriptionNo}? It will be removed from the active list.`)) return;

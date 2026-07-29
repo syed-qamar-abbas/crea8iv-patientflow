@@ -295,7 +295,7 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, prefill, clients, 
   );
 }
 
-function InvoiceDetailModal({ invoice, isOpen, onClose, onMarkPaid, onRefund, onDownload, onPrint, canAdminInvoice }) {
+function InvoiceDetailModal({ invoice, isOpen, onClose, onMarkPaid, onRefund, onDownload, onPrint, onShareWhatsapp, canAdminInvoice }) {
   const { clinicInfo, term } = useClinic();
   const patientLabel = term('patient', 'Patient');
   const [notice, setNotice] = useState('');
@@ -303,10 +303,8 @@ function InvoiceDetailModal({ invoice, isOpen, onClose, onMarkPaid, onRefund, on
   if (!invoice) return null;
   const invoiceClinic = { ...clinicInfo, ...(invoice.clinic || {}) };
   const sendWhatsapp = () => {
-    const phone = (invoice.client?.phone || '').replace(/\D/g, '');
-    if (!phone) return setNotice(`No WhatsApp number found for this ${patientLabel.toLowerCase()}.`);
-    const message = `Hi ${invoice.client?.name || patientLabel}, your invoice ${invoice.invoiceNo} from ${invoiceClinic.name} is ${money(invoice.grandTotal)}. Paid: ${money(invoice.amountPaid)}. Balance: ${money(invoice.balanceDue)}.`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    if (!(invoice.client?.phone || '').replace(/\D/g, '')) setNotice(`No WhatsApp number on file — the PDF will download so you can attach it manually.`);
+    onShareWhatsapp?.(invoice);
   };
 
   return (
@@ -621,7 +619,7 @@ export default function Invoices() {
     }
   };
 
-  const fetchPdfBlobUrl = async (invoice) => {
+  const fetchPdfBlob = async (invoice) => {
     const token = localStorage.getItem('clinic_token');
     // Cache-buster + no-store so the browser never reuses an old cached PDF
     // (e.g. one rendered before the clinic's payment details were added).
@@ -634,8 +632,27 @@ export default function Invoices() {
       try { const j = await response.json(); if (j.error) msg = j.error; } catch (_) { /* non-JSON */ }
       throw new Error(msg);
     }
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    return response.blob();
+  };
+  const fetchPdfBlobUrl = async (invoice) => URL.createObjectURL(await fetchPdfBlob(invoice));
+
+  // WhatsApp share without the Business API: native share sheet with the PDF
+  // attached on mobile/tablet, else download the PDF + open the chat on desktop.
+  const shareInvoiceWhatsapp = async (invoice) => {
+    let phone = (invoice.client?.phone || '').replace(/\D/g, '');
+    if (phone.startsWith('0')) phone = '92' + phone.slice(1);
+    const msg = `Hi ${invoice.client?.name || patientLabel}, please find your invoice ${invoice.invoiceNo}. Grand total ${money(invoice.grandTotal)}, paid ${money(invoice.amountPaid)}, balance ${money(invoice.balanceDue)}.`;
+    let blob;
+    try { blob = await fetchPdfBlob(invoice); } catch (e) { setError(e.message); return; }
+    const file = new File([blob], `${invoice.invoiceNo || 'invoice'}.pdf`, { type: 'application/pdf' });
+    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: invoice.invoiceNo || 'Invoice', text: msg }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = file.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   const downloadPdf = async (invoice) => {
@@ -775,7 +792,7 @@ export default function Invoices() {
       )}
 
       <InvoiceFormModal isOpen={showForm} onClose={() => { setShowForm(false); setEditInvoice(null); setInvoicePrefill(null); }} onSave={saveInvoice} invoice={editInvoice} prefill={invoicePrefill} clients={clients} services={services} appointments={appointments} saving={saving} onPatientSelected={rememberPatient} />
-      <InvoiceDetailModal invoice={selectedInvoice} isOpen={!!selectedInvoice} onClose={() => setSelectedInvoice(null)} onMarkPaid={markPaid} onRefund={(invoice) => { setConfirmInvoice(invoice); setConfirmAction('refund'); }} onDownload={downloadPdf} onPrint={printPdf} canAdminInvoice={canAdminInvoice} />
+      <InvoiceDetailModal invoice={selectedInvoice} isOpen={!!selectedInvoice} onClose={() => setSelectedInvoice(null)} onMarkPaid={markPaid} onRefund={(invoice) => { setConfirmInvoice(invoice); setConfirmAction('refund'); }} onDownload={downloadPdf} onPrint={printPdf} onShareWhatsapp={shareInvoiceWhatsapp} canAdminInvoice={canAdminInvoice} />
       <InvoiceActionConfirmModal
         invoice={confirmInvoice}
         action={confirmAction}
