@@ -274,4 +274,92 @@ class PrescriptionController {
             send_error($e->getMessage(), 500);
         }
     }
+
+    // ---- Phase 2: frequently-prescribed medicines (autocomplete source) ----
+    // Aggregates medicine rows across this clinic's recent prescriptions so the
+    // builder can suggest the drugs this clinic actually uses, pre-filling the
+    // most common dosage/frequency/duration/instructions for each.
+    public function medicineSuggestions($input, $user) {
+        $db = DB::getConnection();
+        $this->ensureTable($db);
+        $stmt = $db->prepare("SELECT medicines FROM Prescription WHERE clinicId = ? AND status != 'cancelled' ORDER BY createdAt DESC LIMIT 500");
+        $stmt->execute([$user['clinicId']]);
+        $agg = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $meds = json_decode($row['medicines'] ?? '[]', true);
+            if (!is_array($meds)) continue;
+            foreach ($meds as $m) {
+                $name = trim((string)($m['name'] ?? ''));
+                if ($name === '') continue;
+                $key = mb_strtolower($name);
+                if (!isset($agg[$key])) {
+                    $agg[$key] = ['name' => $name, 'count' => 0, 'dosage' => $m['dosage'] ?? '', 'frequency' => $m['frequency'] ?? '', 'duration' => $m['duration'] ?? '', 'instructions' => $m['instructions'] ?? ''];
+                }
+                $agg[$key]['count']++;
+            }
+        }
+        usort($agg, fn($a, $b) => $b['count'] - $a['count']);
+        send_json(array_slice(array_values($agg), 0, 100));
+    }
+
+    // ---- Phase 2: reusable prescription templates ----
+    private function ensureTemplateTable($db) {
+        if (DB_DRIVER === 'sqlite') {
+            $db->exec("CREATE TABLE IF NOT EXISTS PrescriptionTemplate (
+                id TEXT PRIMARY KEY, clinicId TEXT NOT NULL, name TEXT NOT NULL,
+                diagnosis TEXT, medicines TEXT, investigations TEXT, additionalNotes TEXT,
+                createdBy TEXT, createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+            $db->exec("CREATE INDEX IF NOT EXISTS IX_RxTemplate_Clinic ON PrescriptionTemplate (clinicId)");
+        } else {
+            $db->exec("CREATE TABLE IF NOT EXISTS PrescriptionTemplate (
+                id VARCHAR(36) NOT NULL, clinicId VARCHAR(36) NOT NULL, name VARCHAR(191) NOT NULL,
+                diagnosis TEXT DEFAULT NULL, medicines MEDIUMTEXT DEFAULT NULL, investigations TEXT DEFAULT NULL,
+                additionalNotes TEXT DEFAULT NULL, createdBy VARCHAR(36) DEFAULT NULL,
+                createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id), KEY IX_RxTemplate_Clinic (clinicId)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        }
+    }
+
+    private function decodeTemplate($row) {
+        if (!$row) return $row;
+        $row['medicines'] = json_decode($row['medicines'] ?? '[]', true) ?: [];
+        return $row;
+    }
+
+    public function listTemplates($input, $user) {
+        $db = DB::getConnection();
+        $this->ensureTemplateTable($db);
+        $stmt = $db->prepare("SELECT * FROM PrescriptionTemplate WHERE clinicId = ? ORDER BY name ASC");
+        $stmt->execute([$user['clinicId']]);
+        send_json(array_map([$this, 'decodeTemplate'], $stmt->fetchAll()));
+    }
+
+    public function createTemplate($input, $user) {
+        $db = DB::getConnection();
+        $this->ensureTemplateTable($db);
+        $name = trim((string)($input['name'] ?? ''));
+        if ($name === '') send_error('Template name is required', 400);
+        $id = generate_uuid();
+        $stmt = $db->prepare("INSERT INTO PrescriptionTemplate (id, clinicId, name, diagnosis, medicines, investigations, additionalNotes, createdBy) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $id, $user['clinicId'], mb_substr($name, 0, 191),
+            trim((string)($input['diagnosis'] ?? '')) ?: null,
+            json_encode($this->normalizeMedicines($input['medicines'] ?? [])),
+            trim((string)($input['investigations'] ?? '')) ?: null,
+            trim((string)($input['additionalNotes'] ?? '')) ?: null,
+            $user['id'] ?? null,
+        ]);
+        $stmt = $db->prepare("SELECT * FROM PrescriptionTemplate WHERE id = ? AND clinicId = ?");
+        $stmt->execute([$id, $user['clinicId']]);
+        send_json($this->decodeTemplate($stmt->fetch()), 201);
+    }
+
+    public function removeTemplate($input, $user, $id) {
+        $db = DB::getConnection();
+        $this->ensureTemplateTable($db);
+        $stmt = $db->prepare("DELETE FROM PrescriptionTemplate WHERE id = ? AND clinicId = ?");
+        $stmt->execute([$id, $user['clinicId']]);
+        send_json(['message' => 'Template deleted']);
+    }
 }

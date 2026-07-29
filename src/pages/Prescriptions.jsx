@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { FileText, Plus, Search, RefreshCcw, Download, Printer, MessageCircle, Trash2, Eye, Pill, X } from 'lucide-react';
+import { FileText, Plus, Search, RefreshCcw, Download, Printer, MessageCircle, Trash2, Eye, Pill, Copy, Pencil, BookmarkPlus, CalendarClock } from 'lucide-react';
 import { fetchApi, API_URL, peekApiCacheByPrefix } from '../config/api';
 import { useClinic } from '../context/ClinicContext';
 import Modal from '../components/ui/Modal';
@@ -23,35 +23,90 @@ const ageFromDob = (dob) => {
   return a >= 0 && a < 150 ? String(a) : '';
 };
 
-// Common frequency / instruction shortcuts speed up entry (Phase 2 will add a
-// full drug autocomplete). Datalists keep it lightweight and template-agnostic.
 const FREQUENCIES = ['Once daily (OD)', 'Twice daily (BD)', 'Three times a day (TID)', 'Four times a day (QID)', 'Every 6 hours', 'Every 8 hours', 'At night', 'SOS (as needed)'];
 const INSTRUCTIONS = ['Before meals', 'After meals', 'With food', 'Empty stomach', 'Morning', 'Night', 'Morning & Night'];
+// Starter common drugs — merged with the clinic's own frequently-prescribed list.
+const COMMON_DRUGS = ['Amoxicillin 500mg', 'Augmentin 625mg', 'Metronidazole 400mg', 'Azithromycin 500mg', 'Ibuprofen 400mg', 'Paracetamol 500mg', 'Diclofenac 50mg', 'Ponstan 500mg', 'Ciprofloxacin 500mg', 'Chlorhexidine mouthwash', 'Omeprazole 20mg'];
 
-function PrescriptionFormModal({ isOpen, onClose, onSaved, staff, clients, initialClientId }) {
+const rxToForm = (rx, { asNew = false } = {}) => ({
+  clientId: rx.clientId || '',
+  staffId: rx.staffId || '',
+  date: asNew ? new Date().toISOString().slice(0, 10) : (rx.date || new Date().toISOString().slice(0, 10)),
+  doctorName: rx.doctorName || '',
+  doctorQualification: rx.doctorQualification || '',
+  doctorRegNo: rx.doctorRegNo || '',
+  diagnosis: rx.diagnosis || '',
+  clinicalNotes: rx.clinicalNotes || '',
+  medicines: (Array.isArray(rx.medicines) && rx.medicines.length) ? rx.medicines.map(m => ({ ...emptyMed, ...m })) : [ { ...emptyMed } ],
+  investigations: rx.investigations || '',
+  followUpDate: asNew ? '' : (rx.followUpDate || ''),
+  additionalNotes: rx.additionalNotes || '',
+});
+
+function PrescriptionFormModal({ isOpen, onClose, onSaved, staff, clients, initialClientId, editRx, duplicateFrom, templates, suggestions, onTemplateSaved }) {
   const { term } = useClinic();
   const patientLabel = term('patient', 'Patient');
+  const isEdit = !!editRx;
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isOpen) { setForm({ ...emptyForm, medicines: [ { ...emptyMed } ], clientId: initialClientId || '' }); setError(''); }
-  }, [isOpen, initialClientId]);
+    if (!isOpen) return;
+    setError('');
+    if (editRx) setForm(rxToForm(editRx));
+    else if (duplicateFrom) setForm(rxToForm(duplicateFrom, { asNew: true }));
+    else setForm({ ...emptyForm, medicines: [ { ...emptyMed } ], clientId: initialClientId || '' });
+  }, [isOpen, editRx, duplicateFrom, initialClientId]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setMed = (i, k, v) => setForm(f => ({ ...f, medicines: f.medicines.map((m, idx) => idx === i ? { ...m, [k]: v } : m) }));
   const addMed = () => setForm(f => ({ ...f, medicines: [...f.medicines, { ...emptyMed }] }));
   const removeMed = (i) => setForm(f => ({ ...f, medicines: f.medicines.filter((_, idx) => idx !== i) }));
 
-  // Picking a doctor prefills their name + qualification (editable).
+  // When a medicine name matches a known suggestion, prefill empty fields with
+  // that drug's most common dosage/frequency/duration/instructions.
+  const onMedName = (i, val) => {
+    const hit = suggestions.find(s => s.name.toLowerCase() === val.trim().toLowerCase());
+    setForm(f => ({ ...f, medicines: f.medicines.map((m, idx) => {
+      if (idx !== i) return m;
+      const next = { ...m, name: val };
+      if (hit) {
+        if (!next.dosage) next.dosage = hit.dosage || '';
+        if (!next.frequency) next.frequency = hit.frequency || '';
+        if (!next.duration) next.duration = hit.duration || '';
+        if (!next.instructions) next.instructions = hit.instructions || '';
+      }
+      return next;
+    }) }));
+  };
+
   const chooseDoctor = (staffId) => {
     const s = staff.find(x => x.id === staffId);
+    setForm(f => ({ ...f, staffId, doctorName: s?.name || f.doctorName, doctorQualification: s?.qualifications || f.doctorQualification }));
+  };
+
+  const applyTemplate = (tplId) => {
+    const tpl = templates.find(t => t.id === tplId);
+    if (!tpl) return;
     setForm(f => ({
-      ...f, staffId,
-      doctorName: s?.name || f.doctorName,
-      doctorQualification: s?.qualifications || f.doctorQualification,
+      ...f,
+      diagnosis: tpl.diagnosis || f.diagnosis,
+      investigations: tpl.investigations || f.investigations,
+      additionalNotes: tpl.additionalNotes || f.additionalNotes,
+      medicines: (Array.isArray(tpl.medicines) && tpl.medicines.length) ? tpl.medicines.map(m => ({ ...emptyMed, ...m })) : f.medicines,
     }));
+  };
+
+  const saveAsTemplate = async () => {
+    const meds = form.medicines.filter(m => m.name.trim());
+    if (!meds.length && !form.diagnosis.trim()) return setError('Add a diagnosis or at least one medicine before saving a template.');
+    const name = window.prompt('Template name (e.g. "Post-extraction pack"):');
+    if (!name || !name.trim()) return;
+    try {
+      const tpl = await fetchApi('/prescription-templates', { method: 'POST', body: JSON.stringify({ name: name.trim(), diagnosis: form.diagnosis, medicines: meds, investigations: form.investigations, additionalNotes: form.additionalNotes }) });
+      onTemplateSaved?.(tpl);
+    } catch (e) { setError(e.message || 'Could not save template.'); }
   };
 
   const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30';
@@ -61,22 +116,26 @@ function PrescriptionFormModal({ isOpen, onClose, onSaved, staff, clients, initi
     const meds = form.medicines.filter(m => m.name.trim());
     setSaving(true); setError('');
     try {
-      await fetchApi('/prescriptions', { method: 'POST', body: JSON.stringify({ ...form, medicines: meds }) });
+      if (isEdit) await fetchApi(`/prescriptions/${editRx.id}`, { method: 'PUT', body: JSON.stringify({ ...form, medicines: meds }) });
+      else await fetchApi('/prescriptions', { method: 'POST', body: JSON.stringify({ ...form, medicines: meds }) });
       onSaved();
-    } catch (e) {
-      setError(e.message || 'Prescription could not be saved.');
-    } finally { setSaving(false); }
+    } catch (e) { setError(e.message || 'Prescription could not be saved.'); }
+    finally { setSaving(false); }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="New Prescription" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? `Edit ${editRx.prescriptionNo}` : (duplicateFrom ? 'Duplicate Prescription' : 'New Prescription')} size="xl">
       <div className="space-y-4">
         {error && <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">{error}</div>}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">{patientLabel} *
             <div className="mt-1">
-              <PatientSearchSelect value={form.clientId} onChange={(id) => set('clientId', id)} fallbackClients={clients} inputClassName={inputCls} />
+              {isEdit ? (
+                <input disabled value={editRx.clientName || ''} className={`${inputCls} opacity-70`} />
+              ) : (
+                <PatientSearchSelect value={form.clientId} onChange={(id) => set('clientId', id)} fallbackClients={clients} inputClassName={inputCls} />
+              )}
             </div>
           </label>
           <div className="grid grid-cols-2 gap-3">
@@ -91,6 +150,15 @@ function PrescriptionFormModal({ isOpen, onClose, onSaved, staff, clients, initi
             </label>
           </div>
         </div>
+
+        {templates.length > 0 && (
+          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200">Load a template
+            <select className={`mt-1 ${inputCls}`} value="" onChange={e => { applyTemplate(e.target.value); e.target.value = ''; }}>
+              <option value="">Apply a saved template…</option>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">Doctor name
@@ -114,14 +182,18 @@ function PrescriptionFormModal({ isOpen, onClose, onSaved, staff, clients, initi
         <div>
           <div className="mb-2 flex items-center justify-between">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200"><Pill className="h-3.5 w-3.5" /> Medications</label>
-            <button type="button" onClick={addMed} className="flex items-center gap-1 text-xs font-bold text-[var(--primary)]"><Plus className="h-3.5 w-3.5" /> Add Medicine</button>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={saveAsTemplate} className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-[var(--primary)]"><BookmarkPlus className="h-3.5 w-3.5" /> Save as template</button>
+              <button type="button" onClick={addMed} className="flex items-center gap-1 text-xs font-bold text-[var(--primary)]"><Plus className="h-3.5 w-3.5" /> Add Medicine</button>
+            </div>
           </div>
+          <datalist id="rx-meds">{[...new Set([...suggestions.map(s => s.name), ...COMMON_DRUGS])].map(n => <option key={n} value={n} />)}</datalist>
           <datalist id="rx-freq">{FREQUENCIES.map(f => <option key={f} value={f} />)}</datalist>
           <datalist id="rx-instr">{INSTRUCTIONS.map(f => <option key={f} value={f} />)}</datalist>
           <div className="space-y-2">
             {form.medicines.map((m, i) => (
               <div key={i} className="grid grid-cols-12 items-center gap-2">
-                <input className={`col-span-12 sm:col-span-3 ${inputCls}`} placeholder="Medicine" value={m.name} onChange={e => setMed(i, 'name', e.target.value)} />
+                <input list="rx-meds" className={`col-span-12 sm:col-span-3 ${inputCls}`} placeholder="Medicine" value={m.name} onChange={e => onMedName(i, e.target.value)} />
                 <input className={`col-span-4 sm:col-span-2 ${inputCls}`} placeholder="Dosage" value={m.dosage} onChange={e => setMed(i, 'dosage', e.target.value)} />
                 <input list="rx-freq" className={`col-span-4 sm:col-span-2 ${inputCls}`} placeholder="Frequency" value={m.frequency} onChange={e => setMed(i, 'frequency', e.target.value)} />
                 <input className={`col-span-4 sm:col-span-2 ${inputCls}`} placeholder="Duration" value={m.duration} onChange={e => setMed(i, 'duration', e.target.value)} />
@@ -136,18 +208,16 @@ function PrescriptionFormModal({ isOpen, onClose, onSaved, staff, clients, initi
           <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">Investigations / Lab Tests
             <textarea rows={2} className={`mt-1 ${inputCls} resize-none`} value={form.investigations} onChange={e => set('investigations', e.target.value)} />
           </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">Follow-up Date
-              <input type="date" className={`mt-1 ${inputCls}`} value={form.followUpDate} onChange={e => set('followUpDate', e.target.value)} />
-            </label>
-          </div>
+          <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">Follow-up Date
+            <input type="date" className={`mt-1 ${inputCls}`} value={form.followUpDate} onChange={e => set('followUpDate', e.target.value)} />
+          </label>
         </div>
         <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200">Additional Notes
           <textarea rows={2} className={`mt-1 ${inputCls} resize-none`} value={form.additionalNotes} onChange={e => set('additionalNotes', e.target.value)} />
         </label>
 
         <div className="flex gap-2 pt-1">
-          <Button variant="primary" className="flex-1 justify-center" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save Prescription'}</Button>
+          <Button variant="primary" className="flex-1 justify-center" onClick={submit} disabled={saving}>{saving ? 'Saving…' : (isEdit ? 'Save Changes' : 'Save Prescription')}</Button>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
         </div>
       </div>
@@ -199,9 +269,14 @@ export default function Prescriptions() {
   const [rows, setRows] = useState(() => { const c = peekApiCacheByPrefix('/prescriptions'); return Array.isArray(c) ? c : []; });
   const [staff, setStaff] = useState([]);
   const [clients, setClients] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [followUpsOnly, setFollowUpsOnly] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editRx, setEditRx] = useState(null);
+  const [duplicateFrom, setDuplicateFrom] = useState(null);
   const [viewRx, setViewRx] = useState(null);
   const [error, setError] = useState('');
   const [prefillClientId, setPrefillClientId] = useState('');
@@ -209,31 +284,39 @@ export default function Prescriptions() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [rx, st, cl] = await Promise.all([
+      const [rx, st, cl, tpl, sug] = await Promise.all([
         fetchApi(`/prescriptions${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''}`),
         fetchApi('/staff').catch(() => []),
         fetchApi('/clients?limit=20').catch(() => ({ clients: [] })),
+        fetchApi('/prescription-templates').catch(() => []),
+        fetchApi('/prescriptions/medicine-suggestions').catch(() => []),
       ]);
       setRows(Array.isArray(rx) ? rx : []);
       setStaff((Array.isArray(st) ? st : (st.staff || [])).filter(s => s.status !== 'inactive'));
       setClients(Array.isArray(cl) ? cl : (cl.clients || []));
+      setTemplates(Array.isArray(tpl) ? tpl : []);
+      setSuggestions(Array.isArray(sug) ? sug : []);
     } catch (e) { setError(e.message || 'Could not load prescriptions.'); }
     finally { setLoading(false); }
   };
 
   useEffect(() => { loadData(); /* eslint-disable-next-line */ }, []);
 
-  // Deep-link from a patient profile: /prescriptions?new=1&clientId=…
   useEffect(() => {
     if (params.get('new') === '1') {
       setPrefillClientId(params.get('clientId') || '');
-      setShowForm(true);
+      setEditRx(null); setDuplicateFrom(null); setShowForm(true);
       params.delete('new'); params.delete('clientId'); setParams(params, { replace: true });
     }
     // eslint-disable-next-line
   }, []);
 
-  const filtered = rows;
+  const today = new Date().toISOString().slice(0, 10);
+  const filtered = useMemo(() => followUpsOnly ? rows.filter(r => r.followUpDate && r.followUpDate >= today) : rows, [rows, followUpsOnly, today]);
+
+  const openNew = () => { setEditRx(null); setDuplicateFrom(null); setPrefillClientId(''); setShowForm(true); };
+  const openEdit = (rx) => { setEditRx(rx); setDuplicateFrom(null); setShowForm(true); };
+  const openDuplicate = (rx) => { setDuplicateFrom(rx); setEditRx(null); setShowForm(true); };
 
   const fetchPdfBlobUrl = async (rx) => {
     const token = localStorage.getItem('clinic_token');
@@ -255,6 +338,8 @@ export default function Prescriptions() {
     try { await fetchApi(`/prescriptions/${rx.id}`, { method: 'DELETE' }); loadData(); } catch (e) { setError(e.message); }
   };
 
+  const followUpCount = rows.filter(r => r.followUpDate && r.followUpDate >= today).length;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -264,42 +349,51 @@ export default function Prescriptions() {
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={loadData}><RefreshCcw className="h-4 w-4" /> Refresh</Button>
-          <Button onClick={() => { setPrefillClientId(''); setShowForm(true); }} data-training="prescriptions-new-button"><Plus className="h-4 w-4" /> New Prescription</Button>
+          <Button onClick={openNew} data-training="prescriptions-new-button"><Plus className="h-4 w-4" /> New Prescription</Button>
         </div>
       </div>
 
       {error && <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10">{error}</div>}
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && loadData()}
-          placeholder={`Search by ${patientLabel.toLowerCase()}, phone, Rx no, or diagnosis…`}
-          className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-10 pr-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-white" />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && loadData()}
+            placeholder={`Search by ${patientLabel.toLowerCase()}, phone, Rx no, or diagnosis…`}
+            className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-10 pr-3 text-sm dark:border-white/10 dark:bg-slate-900 dark:text-white" />
+        </div>
+        <button onClick={() => setFollowUpsOnly(v => !v)}
+          className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold ${followUpsOnly ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]' : 'border-gray-200 text-gray-600 dark:border-white/10 dark:text-gray-300'}`}>
+          <CalendarClock className="h-4 w-4" /> Follow-ups due{followUpCount ? ` (${followUpCount})` : ''}
+        </button>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/5" data-training="prescription-list">
         <div className="hidden grid-cols-12 gap-2 border-b border-gray-100 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-gray-400 dark:border-white/10 sm:grid">
-          <div className="col-span-3">Rx #</div><div className="col-span-3">{patientLabel}</div><div className="col-span-3">Diagnosis</div><div className="col-span-1">Date</div><div className="col-span-2 text-right">Actions</div>
+          <div className="col-span-2">Rx #</div><div className="col-span-3">{patientLabel}</div><div className="col-span-3">Diagnosis</div><div className="col-span-1">Date</div><div className="col-span-1">Follow-up</div><div className="col-span-2 text-right">Actions</div>
         </div>
         {loading && rows.length === 0 ? (
           <div className="py-12 text-center text-sm text-gray-400">Loading…</div>
         ) : filtered.length === 0 ? (
           <div className="py-14 text-center">
             <FileText className="mx-auto h-8 w-8 text-gray-300" />
-            <p className="mt-2 text-sm font-semibold text-gray-500">No prescriptions yet</p>
-            <p className="text-xs text-gray-400">Click “New Prescription” to create the first one.</p>
+            <p className="mt-2 text-sm font-semibold text-gray-500">{followUpsOnly ? 'No upcoming follow-ups' : 'No prescriptions yet'}</p>
+            <p className="text-xs text-gray-400">{followUpsOnly ? 'Prescriptions with a future follow-up date appear here.' : 'Click “New Prescription” to create the first one.'}</p>
           </div>
         ) : filtered.map(rx => (
           <div key={rx.id} className="grid grid-cols-2 items-center gap-2 border-b border-gray-50 px-4 py-3 last:border-0 dark:border-white/5 sm:grid-cols-12">
-            <div className="col-span-2 sm:col-span-3">
+            <div className="col-span-2 sm:col-span-2">
               <button onClick={() => setViewRx(rx)} className="font-bold text-[var(--primary)] hover:underline">{rx.prescriptionNo}</button>
               <p className="text-[11px] text-gray-400 sm:hidden">{rx.clientName} · {rx.date}</p>
             </div>
             <div className="hidden sm:col-span-3 sm:block"><p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{rx.clientName}</p><p className="text-[11px] text-gray-400">{rx.clientPatientNo}</p></div>
             <div className="hidden truncate text-sm text-gray-600 dark:text-gray-300 sm:col-span-3 sm:block">{rx.diagnosis || '—'}</div>
             <div className="hidden text-xs text-gray-500 sm:col-span-1 sm:block">{rx.date}</div>
-            <div className="col-span-2 flex justify-end gap-1 sm:col-span-2">
+            <div className="hidden text-xs sm:col-span-1 sm:block">{rx.followUpDate ? <span className={rx.followUpDate >= today ? 'font-semibold text-amber-600' : 'text-gray-400'}>{rx.followUpDate}</span> : <span className="text-gray-300">—</span>}</div>
+            <div className="col-span-2 flex flex-wrap justify-end gap-1 sm:col-span-2">
               <button onClick={() => setViewRx(rx)} title="View" className="rounded-lg p-1.5 text-gray-400 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]"><Eye className="h-3.5 w-3.5" /></button>
+              <button onClick={() => openEdit(rx)} title="Edit" className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600"><Pencil className="h-3.5 w-3.5" /></button>
+              <button onClick={() => openDuplicate(rx)} title="Duplicate for repeat visit" className="rounded-lg p-1.5 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600"><Copy className="h-3.5 w-3.5" /></button>
               <button onClick={() => downloadPdf(rx)} title="Download PDF" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><Download className="h-3.5 w-3.5" /></button>
               <button onClick={() => printPdf(rx)} title="Print" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><Printer className="h-3.5 w-3.5" /></button>
               <button onClick={() => sendWhatsapp(rx)} title="Share on WhatsApp" className="rounded-lg p-1.5 text-gray-400 hover:bg-green-50 hover:text-green-600"><MessageCircle className="h-3.5 w-3.5" /></button>
@@ -309,7 +403,15 @@ export default function Prescriptions() {
         ))}
       </div>
 
-      <PrescriptionFormModal isOpen={showForm} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); loadData(); }} staff={staff} clients={clients} initialClientId={prefillClientId} />
+      <PrescriptionFormModal
+        isOpen={showForm}
+        onClose={() => { setShowForm(false); setEditRx(null); setDuplicateFrom(null); }}
+        onSaved={() => { setShowForm(false); setEditRx(null); setDuplicateFrom(null); loadData(); }}
+        staff={staff} clients={clients} initialClientId={prefillClientId}
+        editRx={editRx} duplicateFrom={duplicateFrom}
+        templates={templates} suggestions={suggestions}
+        onTemplateSaved={(tpl) => setTemplates(t => [...t, tpl])}
+      />
       <PrescriptionViewModal rx={viewRx} isOpen={!!viewRx} onClose={() => setViewRx(null)} />
     </div>
   );

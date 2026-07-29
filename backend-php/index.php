@@ -317,6 +317,10 @@ $routes = [
     ['DELETE', '^api/v1/users/([^/]+)$', 'UserController', 'remove', ['owner']],
 
     // Prescriptions Routes
+    ['GET', '^api/v1/prescription-templates$', 'PrescriptionController', 'listTemplates', ['owner', 'manager', 'doctor', 'therapist']],
+    ['POST', '^api/v1/prescription-templates$', 'PrescriptionController', 'createTemplate', ['owner', 'manager', 'doctor', 'therapist']],
+    ['DELETE', '^api/v1/prescription-templates/([^/]+)$', 'PrescriptionController', 'removeTemplate', ['owner', 'manager', 'doctor', 'therapist']],
+    ['GET', '^api/v1/prescriptions/medicine-suggestions$', 'PrescriptionController', 'medicineSuggestions', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
     ['GET', '^api/v1/prescriptions$', 'PrescriptionController', 'list', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
     ['POST', '^api/v1/prescriptions$', 'PrescriptionController', 'create', ['owner', 'manager', 'doctor', 'therapist']],
     ['GET', '^api/v1/prescriptions/([^/]+)/pdf$', 'PrescriptionController', 'getPDF', ['owner', 'manager', 'doctor', 'therapist', 'receptionist']],
