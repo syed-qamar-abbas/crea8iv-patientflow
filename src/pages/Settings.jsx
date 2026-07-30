@@ -15,6 +15,26 @@ import { fetchApi, fetchPublicApi } from '../config/api';
 import { getLogoInitials, isImageLogo } from '../utils/branding';
 import { missingClinicFields, isFilled } from '../config/requiredSettings';
 
+// Character limits for fields that render on the fixed-layout invoice/prescription
+// PDFs. Single-line header/footer fields are capped tight; multi-line fields wrap,
+// so they get a generous cap. The PDF also truncates defensively as a safety net.
+export const FIELD_LIMITS = {
+  name: 40, tagline: 60, address: 90, phone: 30, email: 60, website: 60,
+  registrationNo: 40, invoiceFooter: 140, paymentTerms: 500, paymentNote: 400,
+  bankName: 50, bankBranch: 50, accountTitle: 50, accountNumber: 40, iban: 40,
+};
+
+// Live "used / max" counter shown under a limited field; turns amber near the cap.
+function CharCount({ value, max }) {
+  const len = (value || '').length;
+  const near = len >= max * 0.9;
+  return (
+    <p className={`mt-1 text-[10px] font-medium ${near ? 'text-amber-600' : 'text-gray-400'}`}>
+      {len}/{max} characters{near ? ' — near the limit; longer text is trimmed on the PDF' : ''}
+    </p>
+  );
+}
+
 const PORTAL_ROLES = [
   { value: 'owner', label: 'Owner' },
   { value: 'manager', label: 'Manager' },
@@ -728,9 +748,11 @@ export default function Settings() {
             <label className="block text-xs font-semibold text-gray-600 mb-1">{clinicLabel} Name</label>
             <input
               value={localName}
+              maxLength={FIELD_LIMITS.name}
               onChange={e => setLocalName(e.target.value)}
               className={`w-full border ${reqCls(localName)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`}
             />
+            <CharCount value={localName} max={FIELD_LIMITS.name} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -747,35 +769,43 @@ export default function Settings() {
               <label className="block text-xs font-semibold text-gray-600 mb-1">Tagline</label>
               <input
                 value={localTagline}
+                maxLength={FIELD_LIMITS.tagline}
                 onChange={e => setLocalTagline(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
               />
+              <CharCount value={localTagline} max={FIELD_LIMITS.tagline} />
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Address</label>
             <input
               value={localAddress}
+              maxLength={FIELD_LIMITS.address}
               onChange={e => setLocalAddress(e.target.value)}
               className={`w-full border ${reqCls(localAddress)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`}
             />
+            <CharCount value={localAddress} max={FIELD_LIMITS.address} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Phone</label>
               <input
                 value={localPhone}
+                maxLength={FIELD_LIMITS.phone}
                 onChange={e => setLocalPhone(e.target.value)}
                 className={`w-full border ${reqCls(localPhone)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`}
               />
+              <CharCount value={localPhone} max={FIELD_LIMITS.phone} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
               <input
                 value={localEmail}
+                maxLength={FIELD_LIMITS.email}
                 onChange={e => setLocalEmail(e.target.value)}
                 className={`w-full border ${reqCls(localEmail)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`}
               />
+              <CharCount value={localEmail} max={FIELD_LIMITS.email} />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -785,11 +815,13 @@ export default function Settings() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Website</label>
-              <input value={localWebsite} onChange={e => setLocalWebsite(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              <input value={localWebsite} maxLength={FIELD_LIMITS.website} onChange={e => setLocalWebsite(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              <CharCount value={localWebsite} max={FIELD_LIMITS.website} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Registration / NTN</label>
-              <input value={localRegistrationNo} onChange={e => setLocalRegistrationNo(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              <input value={localRegistrationNo} maxLength={FIELD_LIMITS.registrationNo} onChange={e => setLocalRegistrationNo(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              <CharCount value={localRegistrationNo} max={FIELD_LIMITS.registrationNo} />
             </div>
           </div>
 
@@ -832,12 +864,13 @@ export default function Settings() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Payment Terms</label>
-            <textarea rows={4} value={localPaymentTerms} onChange={e => setLocalPaymentTerms(e.target.value)} placeholder={`One point per line - shown as bullets on the invoice:\nPayment due at time of ${serviceLabel}\nBalance to be cleared within 7 days\nDocuments collected after full payment`} className={`w-full border ${reqCls(localPaymentTerms)} rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
-            <p className="text-[10px] text-gray-400 mt-1">Write each term on its own line. Each line becomes a bullet on the invoice.</p>
+            <textarea rows={4} value={localPaymentTerms} maxLength={FIELD_LIMITS.paymentTerms} onChange={e => setLocalPaymentTerms(e.target.value)} placeholder={`One point per line - shown as bullets on the invoice:\nPayment due at time of ${serviceLabel}\nBalance to be cleared within 7 days\nDocuments collected after full payment`} className={`w-full border ${reqCls(localPaymentTerms)} rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <div className="flex items-center justify-between"><p className="text-[10px] text-gray-400 mt-1">Write each term on its own line. Each line becomes a bullet on the invoice.</p><CharCount value={localPaymentTerms} max={FIELD_LIMITS.paymentTerms} /></div>
           </div>
           <div className="lg:col-span-2">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Invoice Footer Message</label>
-            <input value={localInvoiceFooter} onChange={e => setLocalInvoiceFooter(e.target.value)} className={`w-full border ${reqCls(localInvoiceFooter)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <input value={localInvoiceFooter} maxLength={FIELD_LIMITS.invoiceFooter} onChange={e => setLocalInvoiceFooter(e.target.value)} className={`w-full border ${reqCls(localInvoiceFooter)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <CharCount value={localInvoiceFooter} max={FIELD_LIMITS.invoiceFooter} />
           </div>
 
           <div className="lg:col-span-2 mt-1">
@@ -846,27 +879,33 @@ export default function Settings() {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Bank Name</label>
-            <input value={localBankName} onChange={e => setLocalBankName(e.target.value)} placeholder="e.g. Faysal Bank" className={`w-full border ${reqCls(localBankName)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <input value={localBankName} maxLength={FIELD_LIMITS.bankName} onChange={e => setLocalBankName(e.target.value)} placeholder="e.g. Faysal Bank" className={`w-full border ${reqCls(localBankName)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <CharCount value={localBankName} max={FIELD_LIMITS.bankName} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Branch Name</label>
-            <input value={localBankBranch} onChange={e => setLocalBankBranch(e.target.value)} placeholder="e.g. IBB F-8 Markaz, Islamabad" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            <input value={localBankBranch} maxLength={FIELD_LIMITS.bankBranch} onChange={e => setLocalBankBranch(e.target.value)} placeholder="e.g. IBB F-8 Markaz, Islamabad" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            <CharCount value={localBankBranch} max={FIELD_LIMITS.bankBranch} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Account Title</label>
-            <input value={localAccountTitle} onChange={e => setLocalAccountTitle(e.target.value)} placeholder="e.g. The Smile Xperts" className={`w-full border ${reqCls(localAccountTitle)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <input value={localAccountTitle} maxLength={FIELD_LIMITS.accountTitle} onChange={e => setLocalAccountTitle(e.target.value)} placeholder="e.g. The Smile Xperts" className={`w-full border ${reqCls(localAccountTitle)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <CharCount value={localAccountTitle} max={FIELD_LIMITS.accountTitle} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Account Number</label>
-            <input value={localAccountNumber} onChange={e => setLocalAccountNumber(e.target.value)} placeholder="e.g. 0123-4567890123" className={`w-full border ${reqCls(localAccountNumber)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <input value={localAccountNumber} maxLength={FIELD_LIMITS.accountNumber} onChange={e => setLocalAccountNumber(e.target.value)} placeholder="e.g. 0123-4567890123" className={`w-full border ${reqCls(localAccountNumber)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <CharCount value={localAccountNumber} max={FIELD_LIMITS.accountNumber} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">IBAN</label>
-            <input value={localIban} onChange={e => setLocalIban(e.target.value.toUpperCase())} placeholder="e.g. PK00MEZN0000000000000000" className={`w-full border ${reqCls(localIban)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <input value={localIban} maxLength={FIELD_LIMITS.iban} onChange={e => setLocalIban(e.target.value.toUpperCase())} placeholder="e.g. PK00MEZN0000000000000000" className={`w-full border ${reqCls(localIban)} rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300`} />
+            <CharCount value={localIban} max={FIELD_LIMITS.iban} />
           </div>
           <div className="lg:col-span-2">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Payment Note (optional)</label>
-            <input value={localPaymentNote} onChange={e => setLocalPaymentNote(e.target.value)} placeholder="e.g. JazzCash/Easypaisa: 0300-1234567 — send receipt on WhatsApp" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            <input value={localPaymentNote} maxLength={FIELD_LIMITS.paymentNote} onChange={e => setLocalPaymentNote(e.target.value)} placeholder="e.g. JazzCash/Easypaisa: 0300-1234567 — send receipt on WhatsApp" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            <CharCount value={localPaymentNote} max={FIELD_LIMITS.paymentNote} />
           </div>
 
           <div className="lg:col-span-2">

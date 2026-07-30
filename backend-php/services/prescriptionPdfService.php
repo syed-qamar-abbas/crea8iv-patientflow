@@ -93,8 +93,10 @@ function generatePrescriptionPDF($rx, $client, $clinic) {
     $clinic = $clinic ?: [];
     $client = $client ?: [];
     $pdf = new PrescriptionPDF($clinic);
-    $pdf->logoFile = pf_tmp_image_from_dataurl($clinic['logo'] ?? '');
-    $stampFile = pf_tmp_image_from_dataurl($clinic['stampImage'] ?? '');
+    // pf_logo_tempfile (from pdfService) re-encodes via GD, so any format works
+    // (incl. WebP stamps) and a bad image can't crash the PDF.
+    $pdf->logoFile = pf_logo_tempfile($clinic['logo'] ?? '');
+    $stampFile = pf_logo_tempfile($clinic['stampImage'] ?? '');
     $pdf->AddPage();
 
     list($r, $g, $b) = $pdf->hex2rgb($clinic['primaryColor'] ?? '#0f766e');

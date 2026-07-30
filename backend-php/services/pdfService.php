@@ -4,6 +4,7 @@ require_once __DIR__ . '/../libs/fpdf.php';
 class InvoicePDF extends FPDF {
     private $clinic;
     private $invoice;
+    public $logoFile = null;
 
     public function __construct($invoice, $clinic) {
         parent::__construct('P', 'mm', 'A4');
@@ -19,19 +20,30 @@ class InvoicePDF extends FPDF {
         $this->SetFillColor($r, $g, $b);
         $this->Rect(0, 0, 210, 42, 'F');
 
+        // Uploaded clinic logo (optional) in a white chip on the left; the clinic
+        // text shifts right to make room. Truncation keeps long values on one line
+        // so the fixed A4 header can never overflow.
+        $textX = 15;
+        if ($this->logoFile) {
+            $this->SetFillColor(255, 255, 255);
+            $this->Rect(15, 8, 26, 26, 'F');
+            $this->Image($this->logoFile, 16.5, 9.5, 23, 23);
+            $textX = 47;
+        }
+
         // Clinic details
         $this->SetTextColor(255, 255, 255);
         $this->SetFont('Helvetica', 'B', 20);
-        $this->SetXY(15, 10);
-        $this->Cell(0, 8, $this->clinic['name'] ?? 'The Smile Expert', 0, 1);
+        $this->SetXY($textX, 10);
+        $this->Cell(90, 8, pdf_enc(pf_trunc($this->clinic['name'] ?? 'The Smile Expert', 32)), 0, 1);
 
         $this->SetFont('Helvetica', '', 9);
-        $this->SetX(15);
-        $this->Cell(0, 5, $this->clinic['tagline'] ?? 'Premium Dental Care Portal', 0, 1);
-        $this->SetX(15);
-        $this->Cell(0, 5, $this->clinic['address'] ?? 'Dental Clinic, Lahore', 0, 1);
-        $this->SetX(15);
-        $this->Cell(0, 5, ($this->clinic['phone'] ?? '') . ' | ' . ($this->clinic['email'] ?? ''), 0, 1);
+        $tagline = pf_trunc(trim((string)($this->clinic['tagline'] ?? '')), 60);
+        if ($tagline !== '') { $this->SetX($textX); $this->Cell(120, 5, pdf_enc($tagline), 0, 1); }
+        $this->SetX($textX);
+        $this->Cell(120, 5, pdf_enc(pf_trunc($this->clinic['address'] ?? '', 70)), 0, 1);
+        $this->SetX($textX);
+        $this->Cell(120, 5, pdf_enc(pf_trunc(($this->clinic['phone'] ?? '') . ' | ' . ($this->clinic['email'] ?? ''), 70)), 0, 1);
 
         // Invoice title
         $this->SetXY(140, 10);
@@ -71,7 +83,7 @@ class InvoicePDF extends FPDF {
         $this->SetTextColor(100, 116, 139);
         $this->SetFont('Helvetica', '', 8);
         $this->SetY(-24);
-        $this->Cell(0, 4, $this->clinic['invoiceFooter'] ?? 'Thank you for choosing The Smile Expert.', 0, 1, 'C');
+        $this->Cell(0, 4, pdf_enc(pf_trunc($this->clinic['invoiceFooter'] ?? 'Thank you for choosing The Smile Expert.', 140)), 0, 1, 'C');
         $this->Cell(0, 4, 'This is a computer-generated invoice and does not require a signature.', 0, 1, 'C');
 
         $primaryColor = $this->clinic['primaryColor'] ?? '#0f766e';
@@ -107,8 +119,42 @@ function pdf_enc($s) {
     return $s;
 }
 
+// Safely turn an uploaded logo (base64 data URL, any common format) into a clean
+// FPDF-compatible PNG file. FPDF's own PNG parser is fragile (interlacing / odd
+// colour types can crash it), so we re-encode through GD and flatten onto white
+// (the logo sits on a white chip). Returns a temp path, or null if unusable —
+// a bad logo must never break the invoice/prescription PDF.
+function pf_logo_tempfile($dataUrl) {
+    if (empty($dataUrl) || !preg_match('#^data:image/[a-z.+-]+;base64,(.+)$#s', $dataUrl, $m)) return null;
+    if (!function_exists('imagecreatefromstring')) return null; // no GD
+    $bin = base64_decode($m[1]);
+    if ($bin === false || strlen($bin) === 0) return null;
+    $img = @imagecreatefromstring($bin);
+    if (!$img) return null;
+    $w = imagesx($img); $h = imagesy($img);
+    if ($w < 1 || $h < 1 || $w > 4000 || $h > 4000) { imagedestroy($img); return null; }
+    $canvas = imagecreatetruecolor($w, $h);
+    imagefilledrectangle($canvas, 0, 0, $w, $h, imagecolorallocate($canvas, 255, 255, 255));
+    imagealphablending($canvas, true);
+    imagecopy($canvas, $img, 0, 0, 0, 0, $w, $h);
+    $path = sys_get_temp_dir() . '/pflogo_' . uniqid() . '.png';
+    $ok = @imagepng($canvas, $path);
+    imagedestroy($img); imagedestroy($canvas);
+    return $ok ? $path : null;
+}
+
+// Defensive single-line truncation so an over-long stored value (entered before
+// the settings char-limits) can never break the fixed A4 layout.
+function pf_trunc($s, $max) {
+    $s = trim((string)$s);
+    if (function_exists('mb_strlen') && mb_strlen($s) > $max) return mb_substr($s, 0, $max - 1) . "\xE2\x80\xA6";
+    if (strlen($s) > $max) return substr($s, 0, $max - 1) . '...';
+    return $s;
+}
+
 function generateInvoicePDF($invoice, $client, $clinic) {
     $pdf = new InvoicePDF($invoice, $clinic);
+    $pdf->logoFile = pf_logo_tempfile($clinic['logo'] ?? '');
     $pdf->AddPage();
     
     // Bill to info
@@ -358,5 +404,6 @@ function generateInvoicePDF($invoice, $client, $clinic) {
 
     $output = $pdf->Output('S');
     if ($stampFile && file_exists($stampFile)) { @unlink($stampFile); }
+    if ($pdf->logoFile && file_exists($pdf->logoFile)) { @unlink($pdf->logoFile); }
     return $output;
 }
