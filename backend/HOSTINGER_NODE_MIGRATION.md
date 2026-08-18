@@ -99,6 +99,69 @@ https://<node-staging-domain>/clinic/login
 
 The first endpoint proves the Node app is running. The second endpoint proves the Node app can safely reach the current PHP API. The third URL proves the React portal is being served by Node.
 
+## Staging checkpoint - 2026-08-19
+
+PatientFlow staging is deployed on:
+
+```text
+https://node-staging.crea8ivmedia.com/clinic/login
+```
+
+Current staging architecture:
+
+```text
+Browser -> node-staging.crea8ivmedia.com/clinic
+Browser -> node-staging.crea8ivmedia.com/api/v1
+Node app -> php-api.crea8ivmedia.com/api/v1
+PHP API -> existing production database
+```
+
+Verified live:
+
+- `https://node-staging.crea8ivmedia.com/api/v1/node-health` returns `status: ok`, `mode: node-webapp`, and upstream `php-api.crea8ivmedia.com`.
+- `https://node-staging.crea8ivmedia.com/api/v1/health` returns `status: ok` from the proxied API.
+- `https://php-api.crea8ivmedia.com/api/v1/health` returns `status: ok`.
+- `/clinic/login`, `/clinic/dashboard`, `/clinic/appointments`, `/clinic/invoices`, and `/clinic/financials` return HTTP 200 from the Node staging app.
+- Manual browser testing confirmed staging login and protected pages work.
+
+Not done yet:
+
+- The main production domain has not been switched.
+- The Crea8iv Media main website has not been migrated.
+- The PHP API has not been rewritten into Node; staging currently runs a Node web app with a safe proxy to the existing PHP API.
+
+## Dedicated production subdomain checkpoint - 2026-08-19
+
+PatientFlow Node production was deployed to a dedicated subdomain instead of switching the shared main domain:
+
+```text
+https://patientflow.crea8ivmedia.com/login
+```
+
+Current dedicated production architecture:
+
+```text
+Browser -> patientflow.crea8ivmedia.com
+Browser -> patientflow.crea8ivmedia.com/api/v1
+Node app -> php-api.crea8ivmedia.com/api/v1
+PHP API -> existing production database
+```
+
+Verified live:
+
+- `https://patientflow.crea8ivmedia.com/api/v1/node-health` returns `status: ok`, `portalBasePath: /`, and upstream `php-api.crea8ivmedia.com`.
+- `https://patientflow.crea8ivmedia.com/api/v1/health` returns `status: ok` from the proxied API.
+- `https://patientflow.crea8ivmedia.com/login`, `/dashboard`, `/appointments`, `/invoices`, and `/financials` return HTTP 200 from the Node app.
+- `https://patientflow.crea8ivmedia.com/api/v1/auth/login` accepts CORS preflight from `https://patientflow.crea8ivmedia.com`.
+- The deployed bundle uses same-origin `/api/v1` and includes the impersonation restore keys.
+
+Production surfaces intentionally left unchanged:
+
+- `https://crea8ivmedia.com/`
+- `https://crea8ivmedia.com/clinic/login`
+- `https://crea8ivmedia.com/app/api/v1/health`
+- `https://php-api.crea8ivmedia.com/api/v1/health`
+
 ## Migration phases
 
 1. Full Node web app live on staging with the same `/clinic` links.

@@ -1,6 +1,9 @@
 export const API_URL = import.meta.env.VITE_API_URL
   || (import.meta.env.DEV ? 'http://localhost:4000/api/v1' : '/api/v1');
 const APP_BASE = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+const SESSION_KEYS = ['clinic_auth', 'clinic_token', 'clinic_refresh', 'clinic_user'];
+const IMPERSONATION_BACKUP_PREFIX = 'pf_admin_return__';
+const IMPERSONATION_FLAG_KEY = 'pf_impersonating';
 
 export function appPath(path) {
   return `${APP_BASE}${path.startsWith('/') ? path : `/${path}`}` || '/';
@@ -26,11 +29,28 @@ export function peekApiCacheByPrefix(prefix) {
 export function clearApiCache() { _apiCache.clear(); }
 
 function clearSession() {
-  localStorage.removeItem('clinic_auth');
-  localStorage.removeItem('clinic_token');
-  localStorage.removeItem('clinic_refresh');
-  localStorage.removeItem('clinic_user');
+  SESSION_KEYS.forEach((key) => localStorage.removeItem(key));
   clearApiCache();
+}
+
+function restoreAdminSessionFromImpersonation() {
+  if (localStorage.getItem(IMPERSONATION_FLAG_KEY) === null) return false;
+  const hasAdminBackup = localStorage.getItem(`${IMPERSONATION_BACKUP_PREFIX}clinic_auth`) === 'true';
+  if (!hasAdminBackup) return false;
+
+  SESSION_KEYS.forEach((key) => {
+    const backupKey = `${IMPERSONATION_BACKUP_PREFIX}${key}`;
+    const value = localStorage.getItem(backupKey);
+    if (value !== null) {
+      localStorage.setItem(key, value);
+      localStorage.removeItem(backupKey);
+    } else {
+      localStorage.removeItem(key);
+    }
+  });
+  localStorage.removeItem(IMPERSONATION_FLAG_KEY);
+  clearApiCache();
+  return true;
 }
 
 // Single in-flight refresh shared by concurrent 401s
@@ -106,9 +126,12 @@ export async function fetchApi(endpoint, options = {}) {
     // background fetch into a navigation loop that blocks clicks.
     const here = typeof window !== 'undefined' ? window.location.pathname : '';
     if (response.status === 401) {
-      clearSession();
-      const target = appPath('/login');
-      if (here !== target && !here.endsWith('/login')) window.location.href = target;
+      const restoredAdmin = restoreAdminSessionFromImpersonation();
+      const target = restoredAdmin ? appPath('/admin/tenants') : appPath('/login');
+      if (!restoredAdmin) clearSession();
+      if (here !== target && !here.endsWith(restoredAdmin ? '/admin/tenants' : '/login')) {
+        window.location.href = target;
+      }
     }
     if (response.status === 402 && data.code === 'subscription_inactive') {
       const target = appPath('/subscription-inactive');
