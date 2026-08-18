@@ -19,7 +19,13 @@ if ('serviceWorker' in navigator && import.meta.env.DEV) {
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).then((registration) => {
+    const entryScript = [...document.scripts]
+      .map((script) => script.src)
+      .find((src) => /\/assets\/index-[^/]+\.js(?:\?|$)/.test(src));
+    const buildId = entryScript?.match(/index-([^/.]+)\.js/)?.[1] || 'latest';
+    const workerUrl = `${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(buildId)}`;
+
+    navigator.serviceWorker.register(workerUrl, { updateViaCache: 'none' }).then((registration) => {
       registration.update().catch(() => {});
 
       registration.addEventListener('updatefound', () => {
@@ -33,20 +39,21 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
       });
     }).catch(() => {});
 
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (refreshing) return;
-      refreshing = true;
-      if (sessionStorage.getItem('patientflow_sw_reloaded') === '1') return;
-      sessionStorage.setItem('patientflow_sw_reloaded', '1');
+    const reloadForWorker = (scriptUrl) => {
+      const reloadKey = 'patientflow_sw_reloaded_for';
+      const workerVersion = scriptUrl || workerUrl;
+      if (sessionStorage.getItem(reloadKey) === workerVersion) return;
+      sessionStorage.setItem(reloadKey, workerVersion);
       window.location.reload();
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      reloadForWorker(navigator.serviceWorker.controller?.scriptURL);
     });
 
     navigator.serviceWorker.addEventListener('message', (event) => {
       if (event.data?.type !== 'PATIENTFLOW_UPDATED') return;
-      if (sessionStorage.getItem('patientflow_sw_reloaded') === '1') return;
-      sessionStorage.setItem('patientflow_sw_reloaded', '1');
-      window.location.reload();
+      reloadForWorker(event.source?.scriptURL);
     });
   });
 }

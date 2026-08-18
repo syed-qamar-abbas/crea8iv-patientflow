@@ -1,5 +1,5 @@
 const isLocalDev = ['127.0.0.1', 'localhost', '::1'].includes(self.location.hostname);
-const CACHE_NAME = 'patientflow-v5-20260724';
+const CACHE_NAME = 'patientflow-v6-20260818';
 const scopePath = new URL(self.registration.scope).pathname.replace(/\/$/, '');
 const basePath = scopePath === '' ? '' : scopePath;
 const shellPath = (path) => `${basePath}${path}`;
@@ -49,7 +49,10 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).catch(() => caches.match(shellPath('/'))));
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' })
+        .catch(() => caches.match(shellPath('/')))
+    );
     return;
   }
 

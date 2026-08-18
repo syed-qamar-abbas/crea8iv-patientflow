@@ -57,10 +57,10 @@ jobs:
         run: npm ci
 
       - name: Build clinic bundle (path portals)
-        run: npm run build -- --base=/clinic/ && mv dist dist-clinic
+        run: npm run build -- --base=/clinic/ --outDir=dist-clinic --emptyOutDir
 
       - name: Build custom-domain bundle
-        run: npm run build -- --base=/ && mv dist dist-root
+        run: npm run build -- --base=/ --outDir=dist-root --emptyOutDir
 
       - name: Set up SSH
         run: |
@@ -111,6 +111,15 @@ jobs:
           echo "clinic:      built=$BUILT_CLINIC live=$LIVE_CLINIC"
           echo "smilexperts: built=$BUILT_ROOT live=$LIVE_ROOT"
           test "$BUILT_CLINIC" = "$LIVE_CLINIC" && test "$BUILT_ROOT" = "$LIVE_ROOT"
+
+      - name: Verify live service workers match
+        run: |
+          curl -sf "https://crea8ivmedia.com/clinic/sw.js?cb=${GITHUB_SHA}" -o /tmp/live-clinic-sw.js
+          curl -sf "https://portal.thesmilexperts.com/sw.js?cb=${GITHUB_SHA}" -o /tmp/live-root-sw.js
+          cmp dist-clinic/sw.js /tmp/live-clinic-sw.js
+          cmp dist-root/sw.js /tmp/live-root-sw.js
+          grep -q 'patientflow-v6-20260818' /tmp/live-clinic-sw.js
+          echo "Service workers current"
 
       - name: Verify API health
         run: |
