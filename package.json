@@ -2,20 +2,31 @@
   "name": "clinic-management",
   "version": "1.0.0",
   "type": "module",
+  "main": "backend/src/hostingerWebAppServer.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:node-clinic": "vite build --base=/clinic/ --outDir=dist-node-clinic --emptyOutDir",
+    "build:node-root": "vite build --base=/ --outDir=dist-node-root --emptyOutDir",
+    "start": "node backend/src/hostingerWebAppServer.js",
+    "start:node-webapp": "node backend/src/hostingerWebAppServer.js",
     "preview": "vite preview"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
+    "clsx": "^2.0.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "helmet": "^7.2.0",
+    "lucide-react": "^0.294.0",
+    "moment": "^2.29.4",
     "react": "^18.2.0",
+    "react-big-calendar": "^1.10.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
-    "lucide-react": "^0.294.0",
-    "recharts": "^2.10.0",
-    "react-big-calendar": "^1.10.0",
-    "moment": "^2.29.4",
-    "clsx": "^2.0.0"
+    "recharts": "^2.10.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",

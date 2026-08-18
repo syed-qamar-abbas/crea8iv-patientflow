@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-node-clinic/
+dist-node-root/
 build/
 .env
 .env.*

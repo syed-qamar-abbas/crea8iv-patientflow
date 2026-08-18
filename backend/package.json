@@ -5,10 +5,16 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
+    "dev:gateway": "nodemon src/gatewayServer.js",
     "start": "node src/server.js",
+    "start:gateway": "node src/gatewayServer.js",
+    "start:webapp": "node src/hostingerWebAppServer.js",
     "db:push": "prisma db push",
     "db:seed": "node src/utils/seed.js",
     "db:studio": "prisma studio"
+  },
+  "engines": {
+    "node": "20.x"
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",
