@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, BarChart3, DollarSign, Download, FileText, Loader2, Plus,
+  AlertCircle, BarChart3, ChevronLeft, ChevronRight, DollarSign, Download, FileText, Loader2, Plus,
   Pencil, Receipt, Save, Trash2, TrendingDown, TrendingUp, Upload, X
 } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -12,9 +12,13 @@ import { TableSkeleton, CardGridSkeleton } from '../components/ui/Skeleton';
 import { useClinic } from '../context/ClinicContext';
 
 const money = (value = 0) => `PKR ${Number(value || 0).toLocaleString()}`;
-const today = () => new Date().toISOString().slice(0, 10);
-const monthStart = () => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
-const monthEnd = () => new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10);
+const localDate = (date = new Date()) => {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+};
+const today = () => localDate();
+const monthStart = () => localDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+const monthEnd = () => localDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
 const fileBase = API_URL.replace(/\/api\/v1\/?$/, '');
 const emptyExpenseForm = (categoryId = '') => ({
   categoryId, branchId: '', description: '', amount: '', expenseDate: today(), paymentMethod: 'Cash', receipt: null,
@@ -39,6 +43,20 @@ function EmptyState({ icon: Icon = FileText, title, body }) {
       <Icon className="mx-auto h-10 w-10 text-gray-300" />
       <p className="mt-3 text-sm font-bold text-gray-700 dark:text-gray-200">{title}</p>
       <p className="mt-1 text-xs text-gray-400">{body}</p>
+    </div>
+  );
+}
+
+function Pager({ page, pages, total, label, onChange }) {
+  if (pages <= 1 && total <= 0) return null;
+  return (
+    <div className="flex flex-col gap-2 border-t border-gray-100 px-1 pt-3 text-xs text-gray-500 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between">
+      <span>{Number(total || 0).toLocaleString()} {label}</span>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => onChange(page - 1)} disabled={page <= 1} className="rounded-lg border border-gray-200 p-1.5 disabled:opacity-35 dark:border-white/10" aria-label="Previous page"><ChevronLeft className="h-4 w-4" /></button>
+        <span className="font-bold text-gray-700 dark:text-gray-200">Page {page} of {pages}</span>
+        <button type="button" onClick={() => onChange(page + 1)} disabled={page >= pages} className="rounded-lg border border-gray-200 p-1.5 disabled:opacity-35 dark:border-white/10" aria-label="Next page"><ChevronRight className="h-4 w-4" /></button>
+      </div>
     </div>
   );
 }
@@ -130,6 +148,11 @@ export default function Financials() {
   const [monthly, setMonthly] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [expensePage, setExpensePage] = useState(1);
+  const [expenseMeta, setExpenseMeta] = useState({ totalAmount: 0, totalRecords: 0, pages: 1 });
+  const [procedureExpenses, setProcedureExpenses] = useState([]);
+  const [procedureExpensePage, setProcedureExpensePage] = useState(1);
+  const [procedureExpenseMeta, setProcedureExpenseMeta] = useState({ totalAmount: 0, totalRecords: 0, pages: 1 });
   const [categories, setCategories] = useState([]);
   const [branches, setBranches] = useState([]);
   const [profitability, setProfitability] = useState([]);
@@ -152,11 +175,12 @@ export default function Financials() {
     setLoading(true);
     setError('');
     try {
-      const [sum, months, txns, expensePayload, cats, branchRows, profitRows] = await Promise.all([
+      const [sum, months, txns, expensePayload, procedureExpensePayload, cats, branchRows, profitRows] = await Promise.all([
         fetchApi(`/financials/summary?from=${range.from}&to=${range.to}`),
         fetchApi('/financials/monthly'),
         fetchApi('/financials/transactions?limit=50'),
-        fetchApi(`/expenses?from=${range.from}&to=${range.to}`),
+        fetchApi(`/expenses?from=${range.from}&to=${range.to}&paginated=true&page=${expensePage}&limit=20`),
+        fetchApi(`/financials/procedure-expenses?from=${range.from}&to=${range.to}&page=${procedureExpensePage}&limit=20`),
         fetchApi('/expenses/categories'),
         fetchApi('/branches').catch(() => []),
         fetchApi('/financials/profitability').catch(() => []),
@@ -165,6 +189,17 @@ export default function Financials() {
       setMonthly(Array.isArray(months) ? months : []);
       setTransactions(Array.isArray(txns) ? txns : []);
       setExpenses(Array.isArray(expensePayload?.expenses) ? expensePayload.expenses : []);
+      setExpenseMeta({
+        totalAmount: Number(expensePayload?.totalAmount ?? expensePayload?.total ?? 0),
+        totalRecords: Number(expensePayload?.totalRecords ?? expensePayload?.expenses?.length ?? 0),
+        pages: Number(expensePayload?.pages || 1),
+      });
+      setProcedureExpenses(Array.isArray(procedureExpensePayload?.expenses) ? procedureExpensePayload.expenses : []);
+      setProcedureExpenseMeta({
+        totalAmount: Number(procedureExpensePayload?.totalAmount || 0),
+        totalRecords: Number(procedureExpensePayload?.totalRecords || 0),
+        pages: Number(procedureExpensePayload?.pages || 1),
+      });
       setCategories(Array.isArray(cats) ? cats : []);
       setBranches(Array.isArray(branchRows) ? branchRows : []);
       setProfitability(Array.isArray(profitRows) ? profitRows : []);
@@ -177,7 +212,7 @@ export default function Financials() {
     }
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range.from, range.to]);
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [range.from, range.to, expensePage, procedureExpensePage]);
 
   useEffect(() => {
     if (!selectedInvoiceId) { setProcedureRows([]); return; }
@@ -186,7 +221,7 @@ export default function Financials() {
       .catch(() => setProcedureRows([]));
   }, [selectedInvoiceId]);
 
-  const expenseTotal = expenses.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const expenseTotal = expenseMeta.totalAmount;
   const topRevenue = useMemo(() => {
     const grouped = {};
     transactions.forEach(txn => (txn.items || []).forEach(item => {
@@ -367,19 +402,21 @@ export default function Financials() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Revenue, expenses, procedure costs, and profit reporting for authorized roles.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <input type="date" value={range.from} onChange={e => setRange({ ...range, from: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" title="Report start date" />
-          <input type="date" value={range.to} onChange={e => setRange({ ...range, to: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" title="Report end date" />
+          <input type="date" value={range.from} onChange={e => { setExpensePage(1); setProcedureExpensePage(1); setRange({ ...range, from: e.target.value }); }} className="rounded-lg border border-gray-200 px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" title="Report start date" />
+          <input type="date" value={range.to} onChange={e => { setExpensePage(1); setProcedureExpensePage(1); setRange({ ...range, to: e.target.value }); }} className="rounded-lg border border-gray-200 px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" title="Report end date" />
           <Button variant="secondary" size="sm" onClick={load}><Download className="h-4 w-4" /> Refresh</Button>
         </div>
       </div>
 
       {error && <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <SummaryCard label="Revenue" value={money(summary?.totalRevenue)} helper="Collected from paid invoices" icon={DollarSign} tone="bg-emerald-50 text-emerald-700" />
-        <SummaryCard label="Expenses" value={money(summary?.totalExpenses)} helper="Clinic expenses + procedure costs" icon={TrendingDown} tone="bg-rose-50 text-rose-600" />
-        <SummaryCard label="Profit" value={money(summary?.profit)} helper="Revenue − Expenses" icon={TrendingUp} tone="bg-indigo-50 text-indigo-700" />
-        <SummaryCard label="Pending" value={money(summary?.outstandingPayments)} helper="Unpaid invoice balance" icon={AlertCircle} tone="bg-amber-50 text-amber-700" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <SummaryCard label="Collected" value={money(summary?.totalRevenue)} helper="Payments received inside the selected dates" icon={DollarSign} tone="bg-emerald-50 text-emerald-700" />
+        <SummaryCard label="General Expenses" value={money(summary?.generalExpenses)} helper="Rent, utilities, salaries, marketing, and supplies" icon={Receipt} tone="bg-amber-50 text-amber-700" />
+        <SummaryCard label="Procedure Costs" value={money(summary?.procedureCosts)} helper="Internal treatment costs recorded against invoices" icon={BarChart3} tone="bg-rose-50 text-rose-600" />
+        <SummaryCard label="Total Expenses" value={money(summary?.totalExpenses)} helper="General expenses + procedure costs" icon={TrendingDown} tone="bg-rose-50 text-rose-600" />
+        <SummaryCard label="Net Profit" value={money(summary?.profit)} helper="Collected − total expenses" icon={TrendingUp} tone="bg-indigo-50 text-indigo-700" />
+        <SummaryCard label="Outstanding" value={money(summary?.outstandingPayments)} helper="Current unpaid balance across active invoices" icon={AlertCircle} tone="bg-sky-50 text-sky-700" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -492,7 +529,13 @@ export default function Financials() {
         </div>
 
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900 xl:col-span-2">
-          <h2 className="text-sm font-bold text-gray-950 dark:text-white">Expenses</h2>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-gray-950 dark:text-white">General Expenses</h2>
+              <p className="mt-1 text-xs text-gray-400">Manual clinic overheads. Procedure costs are listed separately below.</p>
+            </div>
+            <span className="shrink-0 text-xs font-black text-rose-600">{money(expenseMeta.totalAmount)}</span>
+          </div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead><tr className="border-b border-gray-100 text-left text-[10px] uppercase tracking-wider text-gray-400">{['Date', 'Category', 'Description', 'Branch', 'Amount', 'Receipt', ''].map(h => <th key={h} className="py-3 font-semibold">{h}</th>)}</tr></thead>
@@ -517,7 +560,41 @@ export default function Financials() {
               </tbody>
             </table>
           </div>
+          <Pager page={expensePage} pages={expenseMeta.pages} total={expenseMeta.totalRecords} label="general expenses" onChange={setExpensePage} />
         </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-gray-950 dark:text-white">Procedure Expenses</h2>
+            <p className="mt-1 text-xs text-gray-400">Read-only costs automatically linked from invoice procedures. Edit a cost in Procedure Cost Tracking.</p>
+          </div>
+          <span className="shrink-0 text-xs font-black text-rose-600">{money(procedureExpenseMeta.totalAmount)}</span>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead><tr className="border-b border-gray-100 text-left text-[10px] uppercase tracking-wider text-gray-400">{['Date', 'Invoice', patientLabel, 'Procedure', 'Patient Charge', 'Internal Cost', 'Margin'].map(h => <th key={h} className="py-3 font-semibold">{h}</th>)}</tr></thead>
+            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+              {procedureExpenses.map(expense => {
+                const margin = Number(expense.patientCharge || 0) - Number(expense.procedureCost || 0);
+                return (
+                  <tr key={expense.id}>
+                    <td className="py-3 text-xs text-gray-500">{String(expense.expenseDate || '').slice(0, 10)}</td>
+                    <td className="py-3 font-mono text-xs font-bold text-[var(--primary)]">{expense.invoiceNo}</td>
+                    <td className="py-3 text-xs font-semibold text-gray-900 dark:text-white">{expense.clientName}</td>
+                    <td className="py-3 text-xs text-gray-600 dark:text-gray-300">{expense.procedureName}</td>
+                    <td className="py-3 text-xs font-bold text-gray-700 dark:text-gray-200">{money(expense.patientCharge)}</td>
+                    <td className="py-3 text-xs font-bold text-rose-600">{money(expense.procedureCost)}</td>
+                    <td className={`py-3 text-xs font-black ${margin >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{money(margin)}</td>
+                  </tr>
+                );
+              })}
+              {procedureExpenses.length === 0 && <tr><td colSpan={7}><EmptyState icon={BarChart3} title="No procedure expenses in this range" body="Record internal cost on an invoice item and it will appear here automatically." /></td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <Pager page={procedureExpensePage} pages={procedureExpenseMeta.pages} total={procedureExpenseMeta.totalRecords} label="procedure expenses" onChange={setProcedureExpensePage} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -570,8 +647,8 @@ export default function Financials() {
         </div>
 
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-          <h2 className="text-sm font-bold text-gray-950 dark:text-white">Most Profitable Procedures</h2>
-          <p className="mt-1 text-xs text-gray-400">Based on recorded procedure costs.</p>
+          <h2 className="text-sm font-bold text-gray-950 dark:text-white">Procedure Margin (Billed)</h2>
+          <p className="mt-1 text-xs text-gray-400">Billed patient charges minus recorded internal procedure costs.</p>
           <div className="mt-4 space-y-3">
             {profitableRows.map(row => (
               <div key={row.procedureName} className="rounded-lg bg-gray-50 p-3 dark:bg-white/5">
@@ -586,9 +663,9 @@ export default function Financials() {
             ))}
           </div>
 
-          <h2 className="mt-6 text-sm font-bold text-gray-950 dark:text-white">Top Revenue {serviceLabel}s</h2>
+          <h2 className="mt-6 text-sm font-bold text-gray-950 dark:text-white">Top Billed {serviceLabel}s</h2>
           <div className="mt-4 space-y-3">
-            {(topRevenue.length ? topRevenue : [{ name: `No paid ${serviceLabel.toLowerCase()}s yet`, revenue: 0 }]).map(row => (
+            {(topRevenue.length ? topRevenue : [{ name: `No billed ${serviceLabel.toLowerCase()}s yet`, revenue: 0 }]).map(row => (
               <div key={row.name} className="flex items-center justify-between rounded-lg bg-gray-50 p-3 dark:bg-white/5">
                 <span className="text-xs font-bold text-gray-700 dark:text-gray-200">{row.name}</span>
                 <span className="text-xs font-black text-gray-950 dark:text-white">{money(row.revenue)}</span>

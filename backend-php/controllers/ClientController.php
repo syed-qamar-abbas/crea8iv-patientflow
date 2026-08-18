@@ -38,6 +38,7 @@ class ClientController {
         $specialty = $_GET['specialty'] ?? '';
         $status = $_GET['status'] ?? '';
         $tier = $_GET['tier'] ?? '';
+        $duesOnly = ($_GET['duesOnly'] ?? '') === 'true';
         $page = max(1, isset($_GET['page']) ? intval($_GET['page']) : 1);
         $limit = min(100, max(1, isset($_GET['limit']) ? intval($_GET['limit']) : 50));
         $offset = ($page - 1) * $limit;
@@ -70,6 +71,9 @@ class ClientController {
             $where[] = "loyaltyTier = ?";
             $params[] = $tier;
         }
+        if ($duesOnly) {
+            $where[] = "outstandingBalance > 0";
+        }
 
         $whereSql = implode(" AND ", $where);
 
@@ -97,7 +101,8 @@ class ClientController {
         }
 
         // Get clients
-        $stmt = $db->prepare("SELECT * FROM Client WHERE $whereSql ORDER BY createdAt DESC LIMIT $limit OFFSET $offset");
+        $orderBy = $duesOnly ? 'outstandingBalance DESC, createdAt DESC' : 'createdAt DESC';
+        $stmt = $db->prepare("SELECT * FROM Client WHERE $whereSql ORDER BY $orderBy LIMIT $limit OFFSET $offset");
         $stmt->execute($params);
         $clients = $stmt->fetchAll();
 
@@ -125,7 +130,10 @@ class ClientController {
         if (pf_can_manage_procedure_costs($user)) {
             try {
                 // Canonical cost source = InvoiceProcedureCost (same as clinic P&L).
-                $stmt = $db->prepare("SELECT COALESCE(SUM(procedureCost), 0) FROM InvoiceProcedureCost WHERE clientId = ? AND clinicId = ?");
+                $stmt = $db->prepare("SELECT COALESCE(SUM(pc.procedureCost), 0)
+                    FROM InvoiceProcedureCost pc
+                    JOIN Invoice i ON i.id = pc.invoiceId AND i.clinicId = pc.clinicId
+                    WHERE pc.clientId = ? AND pc.clinicId = ? AND i.status NOT IN ('refunded', 'cancelled')");
                 $stmt->execute([$id, $user['clinicId']]);
                 $procedureCost = floatval($stmt->fetchColumn() ?: 0);
             } catch (Exception $e) { $procedureCost = 0; }

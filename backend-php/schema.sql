@@ -355,6 +355,30 @@ CREATE TABLE `Invoice` (
   CONSTRAINT `FK_Invoice_Appointment` FOREIGN KEY (`appointmentId`) REFERENCES `Appointment` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE `InvoicePaymentEntry` (
+  `id` VARCHAR(36) NOT NULL,
+  `clinicId` VARCHAR(36) NOT NULL,
+  `invoiceId` VARCHAR(36) NOT NULL,
+  `clientId` VARCHAR(36) NOT NULL,
+  `amount` DOUBLE NOT NULL,
+  `type` VARCHAR(30) NOT NULL DEFAULT 'payment',
+  `paymentMethod` VARCHAR(100) DEFAULT NULL,
+  `paidAt` DATETIME NOT NULL,
+  `createdBy` VARCHAR(36) DEFAULT NULL,
+  `notes` VARCHAR(255) DEFAULT NULL,
+  `sourceKey` VARCHAR(120) DEFAULT NULL,
+  `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UK_InvoicePayment_Source` (`clinicId`, `sourceKey`),
+  KEY `IX_InvoicePayment_Clinic_Date` (`clinicId`, `paidAt`),
+  KEY `IX_InvoicePayment_Invoice_Date` (`invoiceId`, `paidAt`),
+  KEY `IX_InvoicePayment_Client_Date` (`clientId`, `paidAt`),
+  CONSTRAINT `FK_InvoicePayment_Clinic` FOREIGN KEY (`clinicId`) REFERENCES `Clinic` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `FK_InvoicePayment_Invoice` FOREIGN KEY (`invoiceId`) REFERENCES `Invoice` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `FK_InvoicePayment_Client` FOREIGN KEY (`clientId`) REFERENCES `Client` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `FK_InvoicePayment_User` FOREIGN KEY (`createdBy`) REFERENCES `User` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Expense categories and entries are additive financial records. They never
 -- rewrite invoices or patient balances.
 CREATE TABLE `ExpenseCategory` (

@@ -37,6 +37,7 @@ model Clinic {
   appointments Appointment[]
   packages     Package[]
   invoices     Invoice[]
+  invoicePayments InvoicePaymentEntry[]
   inventory    InventoryItem[]
   campaigns    Campaign[]
   users        User[]
@@ -75,6 +76,7 @@ model User {
   clinic        Clinic         @relation(fields: [clinicId], references: [id])
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
+  invoicePayments InvoicePaymentEntry[]
 }
 
 model RefreshToken {
@@ -153,6 +155,7 @@ model Client {
   clinic        Clinic          @relation(fields: [clinicId], references: [id])
   appointments  Appointment[]
   invoices      Invoice[]
+  invoicePayments InvoicePaymentEntry[]
   packages      ClientPackage[]
   feedback      Feedback[]
   galleryItems  GalleryItem[]
@@ -275,6 +278,32 @@ model Invoice {
   clinic      Clinic       @relation(fields: [clinicId], references: [id])
   client      Client       @relation(fields: [clientId], references: [id])
   appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  payments    InvoicePaymentEntry[]
+}
+
+model InvoicePaymentEntry {
+  id            String   @id @default(uuid())
+  clinicId      String
+  invoiceId     String
+  clientId      String
+  amount        Float
+  type          String   @default("payment")
+  paymentMethod String?
+  paidAt        DateTime
+  createdBy     String?
+  notes         String?
+  sourceKey     String?
+  createdAt     DateTime @default(now())
+
+  clinic  Clinic @relation(fields: [clinicId], references: [id])
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  client  Client @relation(fields: [clientId], references: [id])
+  user    User? @relation(fields: [createdBy], references: [id])
+
+  @@unique([clinicId, sourceKey])
+  @@index([clinicId, paidAt])
+  @@index([invoiceId, paidAt])
+  @@index([clientId, paidAt])
 }
 
 model InventoryItem {

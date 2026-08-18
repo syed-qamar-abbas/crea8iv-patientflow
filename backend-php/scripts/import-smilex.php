@@ -10,6 +10,7 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
+require_once __DIR__ . '/../services/invoicePaymentService.php';
 
 $CLINIC_ID = 'clinic-smile-expert-001';
 $MARKER    = 'Imported: Google Sheet (Nov-Dec 2025)';
@@ -123,9 +124,14 @@ try {
             $items = json_encode([[ 'description' => $proc, 'qty' => 1, 'unitPrice' => $price, 'rate' => $price, 'amount' => $price ]]);
             $method = $v['method'] ?: 'Cash';
             if (!$dry) {
+                $invoiceId = generate_uuid();
                 $db->prepare("INSERT INTO Invoice (id, clinicId, clientId, appointmentId, invoiceNo, items, subtotal, previousBalance, discount, tax, total, grandTotal, amountPaid, balanceDue, status, paymentMethod, notes, paidAt, createdAt)
                               VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, 0, 'paid', ?, ?, ?, ?)")
-                   ->execute([generate_uuid(), $CLINIC_ID, $cid, $apptId, $invoiceNo, $items, $price, $price, $price, $price, $method, $TAG, $date.' 12:00:00', $date.' 12:00:00']);
+                   ->execute([$invoiceId, $CLINIC_ID, $cid, $apptId, $invoiceNo, $items, $price, $price, $price, $price, $method, $TAG, $date.' 12:00:00', $date.' 12:00:00']);
+                pf_record_invoice_payment_event(
+                    $db, $CLINIC_ID, $invoiceId, $cid, $price, 'legacy', $method,
+                    null, $date . ' 12:00:00', $TAG, 'legacy:' . $invoiceId
+                );
             }
             $invCreated++; $revenue += $price;
         }

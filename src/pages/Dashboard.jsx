@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Archive, ArrowRight, Bot, Building2, Calendar, Database, DollarSign, Facebook, FileBarChart, FlaskConical, Image, LifeBuoy, Loader2, Megaphone, MessageCircle, MessageSquare, Package, Receipt, Settings, Shield, Stethoscope, Target, Users, UserCheck, WalletCards } from 'lucide-react';
-import { fetchApi, peekApiCacheByPrefix } from '../config/api';
+import { fetchApi, peekApiCache, peekApiCacheByPrefix } from '../config/api';
 import { CardGridSkeleton, TableSkeleton } from '../components/ui/Skeleton';
 import { useClinic } from '../context/ClinicContext';
 import StatCard from '../components/ui/StatCard';
@@ -12,6 +12,16 @@ import Badge from '../components/ui/Badge';
 import { canAccessPath, canViewBusinessFinancials, getCurrentRole } from '../config/roles';
 
 const money = (value = 0) => `PKR ${Number(value || 0).toLocaleString()}`;
+const localDate = (date) => {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+};
+const monthFinancialEndpoint = () => {
+  const now = new Date();
+  const from = localDate(new Date(now.getFullYear(), now.getMonth(), 1));
+  const to = localDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  return `/financials/summary?from=${from}&to=${to}`;
+};
 
 const iconMap = { Archive, Bot, Building2, Calendar, Database, DollarSign, Facebook, FileBarChart, FlaskConical, Image, LifeBuoy, Megaphone, MessageCircle, MessageSquare, Package, Receipt, Settings, Shield, Stethoscope, Users, UserCheck, WalletCards };
 
@@ -51,7 +61,7 @@ export default function Dashboard() {
       staff: asArr(peekApiCacheByPrefix('/staff')),
       services: asArr(peekApiCacheByPrefix('/services')),
       invoices: asArr(peekApiCacheByPrefix('/invoices'), 'invoices'),
-      financials: peekApiCacheByPrefix('/financials/summary') ?? null,
+      financials: peekApiCache(monthFinancialEndpoint()) ?? null,
     };
   });
   const [loading, setLoading] = useState(true);
@@ -64,7 +74,7 @@ export default function Dashboard() {
       fetchApi('/staff').catch(() => []),
       fetchApi('/services').catch(() => []),
       fetchApi('/invoices').catch(() => []),
-      canSeeFinancials ? fetchApi('/financials/summary').catch(() => ({})) : Promise.resolve({}),
+      canSeeFinancials ? fetchApi(monthFinancialEndpoint()).catch(() => ({})) : Promise.resolve({}),
     ]).then(([appointments, clients, staff, services, invoices, financials]) => {
       setData({
         appointments: Array.isArray(appointments) ? appointments : [],
@@ -79,7 +89,7 @@ export default function Dashboard() {
     }).finally(() => setLoading(false));
   }, [canSeeFinancials]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate(new Date());
   const todayAppts = data.appointments.filter(appt => appt.date === today);
   const activeStaff = data.staff.filter(member => member.status === 'active');
   const pendingInvoices = data.invoices.filter(inv => inv.status === 'pending' || inv.status === 'partial');

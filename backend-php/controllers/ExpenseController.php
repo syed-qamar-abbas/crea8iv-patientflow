@@ -125,30 +125,50 @@ class ExpenseController {
         $to = $_GET['to'] ?? date('Y-m-t');
         $categoryId = $_GET['categoryId'] ?? '';
         $branchId = $_GET['branchId'] ?? '';
-        if (!pf_valid_date($from) || !pf_valid_date($to)) send_error('Invalid date range', 400);
+        $paginated = ($_GET['paginated'] ?? '') === 'true' || isset($_GET['page']) || isset($_GET['limit']);
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        $offset = ($page - 1) * $limit;
+        if (!pf_valid_date($from) || !pf_valid_date($to) || $from > $to) send_error('Invalid date range', 400);
 
         $where = ["e.clinicId = ?", "e.archivedAt IS NULL", "e.expenseDate >= ?", "e.expenseDate <= ?"];
         $params = [$user['clinicId'], $from, $to];
         if ($categoryId) { $where[] = "e.categoryId = ?"; $params[] = $categoryId; }
         if ($branchId) { $where[] = "e.branchId = ?"; $params[] = $branchId; }
 
-        $stmt = $db->prepare("SELECT e.*, ec.name AS categoryName, b.name AS branchName, u.name AS createdByName
+        $whereSql = implode(' AND ', $where);
+        $stmtTotals = $db->prepare("SELECT COUNT(*), COALESCE(SUM(e.amount), 0) FROM Expense e WHERE $whereSql");
+        $stmtTotals->execute($params);
+        $totals = $stmtTotals->fetch(PDO::FETCH_NUM) ?: [0, 0];
+        $totalRecords = intval($totals[0]);
+        $totalAmount = floatval($totals[1]);
+
+        $sql = "SELECT e.*, ec.name AS categoryName, b.name AS branchName, u.name AS createdByName
             FROM Expense e
             LEFT JOIN ExpenseCategory ec ON ec.id = e.categoryId AND ec.clinicId = e.clinicId
             LEFT JOIN Branch b ON b.id = e.branchId AND b.clinicId = e.clinicId
             LEFT JOIN User u ON u.id = e.createdBy AND u.clinicId = e.clinicId
-            WHERE " . implode(' AND ', $where) . "
-            ORDER BY e.expenseDate DESC, e.createdAt DESC");
+            WHERE $whereSql
+            ORDER BY e.expenseDate DESC, e.createdAt DESC";
+        if ($paginated) $sql .= " LIMIT $limit OFFSET $offset";
+        $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
 
-        $total = 0;
         foreach ($rows as &$row) {
             $row['amount'] = floatval($row['amount'] ?? 0);
             $row['receiptUrl'] = pf_uploads_url_to_signed($row['receiptUrl'] ?? null);
-            $total += $row['amount'];
         }
-        send_json(['expenses' => $rows, 'total' => $total]);
+        unset($row);
+        send_json([
+            'expenses' => $rows,
+            'total' => $totalAmount,
+            'totalAmount' => $totalAmount,
+            'totalRecords' => $totalRecords,
+            'page' => $page,
+            'pages' => max(1, (int)ceil($totalRecords / $limit)),
+            'limit' => $limit,
+        ]);
     }
 
     public function create($input, $user) {

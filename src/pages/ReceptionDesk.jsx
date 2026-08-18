@@ -4,12 +4,16 @@ import { AlertTriangle, CalendarCheck, CheckCircle2, Clock, Copy, CreditCard, Lo
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
-import { fetchApi } from '../config/api';
+import { fetchApi, peekApiCache } from '../config/api';
 import { useClinic } from '../context/ClinicContext';
 import { invoicePrefillFromAppointment, invoicePrefillSearch } from '../utils/invoicePrefill';
 import { openWhatsAppMessage } from '../utils/whatsapp';
 
 const money = (value = 0) => `PKR ${Number(value || 0).toLocaleString()}`;
+const localDate = (date = new Date()) => {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+};
 
 function buildCloseoutMessage({ clinicInfo, today, appointmentLabel, appointmentsLabel, patientLabel, summary, pendingBills, duePatients, note }) {
   const lines = [
@@ -206,24 +210,37 @@ export default function ReceptionDesk() {
   const appointmentsLabel = term('appointments', 'Appointments');
   const treatmentLabel = term('treatment', term('service', 'Service'));
   const doctorLabel = term('doctor', 'Doctor');
-  const [appointments, setAppointments] = useState([]);
-  const [invoices, setInvoices] = useState([]);
-  const [clients, setClients] = useState([]);
+  const today = localDate();
+  const appointmentEndpoint = `/appointments?from=${today}&to=${today}&limit=200`;
+  const invoiceEndpoint = `/invoices?from=${today}&to=${today}&limit=200`;
+  const paymentEndpoint = `/invoices/payments?from=${today}&to=${today}&limit=500`;
+  const duesEndpoint = '/clients?duesOnly=true&limit=5';
+  const [appointments, setAppointments] = useState(() => peekApiCache(appointmentEndpoint) || []);
+  const [invoices, setInvoices] = useState(() => peekApiCache(invoiceEndpoint) || []);
+  const [payments, setPayments] = useState(() => peekApiCache(paymentEndpoint)?.payments || []);
+  const [clients, setClients] = useState(() => peekApiCache(duesEndpoint)?.clients || []);
   const [search, setSearch] = useState('');
   const [showDayClose, setShowDayClose] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([fetchApi('/appointments'), fetchApi('/invoices'), fetchApi('/clients')])
-      .then(([apptRows, invoiceRows, clientRows]) => {
+    Promise.all([
+      fetchApi(appointmentEndpoint),
+      fetchApi(invoiceEndpoint),
+      fetchApi(paymentEndpoint),
+      fetchApi(duesEndpoint),
+    ])
+      .then(([apptRows, invoiceRows, paymentRows, clientRows]) => {
         setAppointments(Array.isArray(apptRows) ? apptRows : []);
         setInvoices(Array.isArray(invoiceRows) ? invoiceRows : []);
+        setPayments(Array.isArray(paymentRows?.payments) ? paymentRows.payments : []);
         setClients(Array.isArray(clientRows) ? clientRows : (clientRows.clients || []));
       })
+      .catch(err => setError(err.message || 'Reception data could not be loaded.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [appointmentEndpoint, duesEndpoint, invoiceEndpoint, paymentEndpoint]);
 
-  const today = new Date().toISOString().slice(0, 10);
   const todayAppointments = appointments.filter(appointment => appointment.date === today);
   const filteredAppointments = todayAppointments.filter(appointment => {
     const q = search.trim().toLowerCase();
@@ -232,8 +249,8 @@ export default function ReceptionDesk() {
       .some(value => String(value || '').toLowerCase().includes(q));
   });
   const todayInvoices = invoices.filter(invoice => String(invoice.createdAt || '').slice(0, 10) === today);
-  const cashReceived = todayInvoices.filter(invoice => invoice.status === 'paid' && invoice.paymentMethod === 'Cash').reduce((sum, invoice) => sum + Number(invoice.amountPaid || 0), 0);
-  const cardBankReceived = todayInvoices.filter(invoice => ['Card', 'Bank Transfer', 'JazzCash', 'EasyPaisa'].includes(invoice.paymentMethod)).reduce((sum, invoice) => sum + Number(invoice.amountPaid || 0), 0);
+  const cashReceived = payments.filter(payment => payment.paymentMethod === 'Cash').reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const cardBankReceived = payments.filter(payment => payment.paymentMethod !== 'Cash').reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const duePatients = useMemo(() => clients.filter(client => Number(client.outstandingBalance || 0) > 0).slice(0, 5), [clients]);
   const billedAppointmentIds = useMemo(() => new Set(todayInvoices.map(invoice => invoice.appointmentId).filter(Boolean)), [todayInvoices]);
   const pendingBills = useMemo(() => todayAppointments.filter(appointment => {
@@ -265,6 +282,7 @@ export default function ReceptionDesk() {
 
   return (
     <div className="space-y-5">
+      {error && <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{error}</div>}
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-950 dark:text-white">Reception Desk</h1>
@@ -299,7 +317,7 @@ export default function ReceptionDesk() {
         <DeskCard icon={CalendarCheck} label={`Today's ${appointmentsLabel}`} value={todayAppointments.length} />
         <DeskCard icon={Receipt} label="Bills To Prepare" value={pendingBills.length} />
         <DeskCard icon={WalletCards} label="Cash Received Today" value={money(cashReceived)} tone="text-teal-700" />
-        <DeskCard icon={CreditCard} label="Card/Bank Received" value={money(cardBankReceived)} tone="text-[var(--primary)]" />
+        <DeskCard icon={CreditCard} label="Digital/Other Received" value={money(cardBankReceived)} tone="text-[var(--primary)]" />
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle, Download, Edit2, Eye, Loader2, MessageCircle, Plus, Receipt, RefreshCcw, Search, Trash2, Undo2, UserRound } from 'lucide-react';
+import { Download, Edit2, Eye, Loader2, MessageCircle, Plus, Receipt, RefreshCcw, Search, Trash2, Undo2, UserRound, WalletCards } from 'lucide-react';
 import { API_URL, fetchApi, peekApiCacheByPrefix } from '../config/api';
 import { TableSkeleton, CardGridSkeleton } from '../components/ui/Skeleton';
 import { useClinic } from '../context/ClinicContext';
@@ -13,6 +13,10 @@ import { canManageInvoiceAdmin, isReceptionist, canViewBusinessFinancials } from
 
 const statusVariant = { paid: 'paid', pending: 'pending', partial: 'pending', refunded: 'refunded' };
 const money = (value = 0) => `PKR ${Math.round(Number(value || 0)).toLocaleString()}`;
+const localDate = (date = new Date()) => {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+};
 const emptyItem = { description: '', qty: 1, unitPrice: 0, serviceId: '' };
 const emptyInvoice = {
   clientId: '',
@@ -260,7 +264,7 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, prefill, clients, 
         <div className="grid gap-4 sm:grid-cols-4">
           <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">Discount Type<select className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" value={form.discountMode} onChange={e => set('discountMode', e.target.value)}><option value="amount">Amount (PKR)</option><option value="percentage">Percentage (%)</option></select></label>
           <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">{form.discountMode === 'percentage' ? 'Discount %' : 'Discount (PKR)'}<input type="number" min="0" step={form.discountMode === 'percentage' ? '1' : '50'} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" value={form.discount} onChange={e => set('discount', e.target.value)} placeholder={form.discountMode === 'percentage' ? 'e.g. 10' : 'e.g. 500'} /></label>
-          <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">Paid Now<input type="number" min="0" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" value={form.amountPaid} onChange={e => set('amountPaid', e.target.value)} /></label>
+          <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">{invoice ? 'Total Paid (correction)' : 'Paid Now'}<input type="number" min="0" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" value={form.amountPaid} onChange={e => set('amountPaid', e.target.value)} /></label>
           <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">Method<select className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>JazzCash</option><option>EasyPaisa</option></select></label>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -289,6 +293,55 @@ function InvoiceFormModal({ isOpen, onClose, onSave, invoice, prefill, clients, 
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} disabled={saving} data-training="invoice-save-button">{saving && <Loader2 className="h-4 w-4 animate-spin" />}{invoice ? 'Save Invoice' : 'Create Invoice'}</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function RecordPaymentModal({ invoice, onClose, onSave, saving }) {
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState('Cash');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setAmount(invoice ? String(Number(invoice.balanceDue || 0)) : '');
+    setMethod(invoice?.paymentMethod || 'Cash');
+    setError('');
+  }, [invoice?.id]);
+
+  if (!invoice) return null;
+  const balance = Number(invoice.balanceDue || 0);
+  const submit = () => {
+    const payment = Number(amount || 0);
+    if (payment <= 0) return setError('Enter a payment amount greater than zero.');
+    if (payment > balance) return setError('Payment cannot exceed the remaining balance.');
+    onSave(invoice, payment, method);
+  };
+
+  return (
+    <Modal isOpen={!!invoice} onClose={onClose} title="Record Payment" size="sm">
+      <div className="space-y-4">
+        <div className="rounded-xl bg-gray-50 p-4 text-sm dark:bg-white/5">
+          <div className="flex justify-between gap-3"><span className="text-gray-500">Invoice</span><span className="font-bold text-gray-900 dark:text-white">{invoice.invoiceNo}</span></div>
+          <div className="mt-2 flex justify-between gap-3"><span className="text-gray-500">Patient</span><span className="font-bold text-gray-900 dark:text-white">{invoice.client?.name || 'Patient'}</span></div>
+          <div className="mt-2 flex justify-between gap-3"><span className="text-gray-500">Remaining balance</span><span className="font-black text-rose-600">{money(balance)}</span></div>
+        </div>
+        {error && <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{error}</div>}
+        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200">
+          Amount received now
+          <input type="number" min="0.01" max={balance} step="any" value={amount} onChange={e => setAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" autoFocus />
+        </label>
+        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-200">
+          Payment method
+          <select value={method} onChange={e => setMethod(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900">
+            {['Cash', 'Card', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other'].map(option => <option key={option}>{option}</option>)}
+          </select>
+        </label>
+        <p className="text-xs leading-5 text-gray-400">This payment will count in the month and day it is received, even when the invoice is older.</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={submit} disabled={saving}>{saving && <Loader2 className="h-4 w-4 animate-spin" />}<WalletCards className="h-4 w-4" /> Record Payment</Button>
         </div>
       </div>
     </Modal>
@@ -377,7 +430,7 @@ function InvoiceDetailModal({ invoice, isOpen, onClose, onMarkPaid, onRefund, on
         <div className="flex flex-wrap gap-2 no-print">
           <Button variant="secondary" onClick={() => onPrint(invoice)}>Print</Button>
           <Button variant="secondary" onClick={() => onDownload(invoice)}><Download className="h-4 w-4" /> PDF</Button>
-          {invoice.status !== 'paid' && invoice.status !== 'refunded' && <Button onClick={() => onMarkPaid(invoice)}><CheckCircle className="h-4 w-4" /> Mark Paid</Button>}
+          {!['paid', 'refunded', 'cancelled'].includes(invoice.status) && <Button onClick={() => onMarkPaid(invoice)}><WalletCards className="h-4 w-4" /> Record Payment</Button>}
           {canAdminInvoice && invoice.status === 'paid' && <Button variant="secondary" onClick={() => onRefund(invoice)}><Undo2 className="h-4 w-4" /> Refund</Button>}
           <Button variant="secondary" onClick={sendWhatsapp}><MessageCircle className="h-4 w-4" /> WhatsApp</Button>
         </div>
@@ -461,6 +514,7 @@ export default function Invoices() {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
   const [confirmInvoice, setConfirmInvoice] = useState(null);
+  const [paymentInvoice, setPaymentInvoice] = useState(null);
   const [error, setError] = useState('');
   const page = pagination.page;
 
@@ -511,7 +565,7 @@ export default function Invoices() {
     from.setDate(today.getDate() - 30);
     const to = new Date(today);
     to.setDate(today.getDate() + 60);
-    const dateRange = `from=${from.toISOString().slice(0, 10)}&to=${to.toISOString().slice(0, 10)}`;
+    const dateRange = `from=${localDate(from)}&to=${localDate(to)}`;
 
     if (showSpinner) setLoading(true);
     setError('');
@@ -583,14 +637,18 @@ export default function Invoices() {
     }
   };
 
-  const markPaid = async (invoice) => {
+  const recordPayment = async (invoice, paymentAmount, paymentMethod) => {
+    setSaving(true);
     setError('');
     try {
-      await fetchApi(`/invoices/${invoice.id}/paid`, { method: 'PUT', body: JSON.stringify({ paymentMethod: invoice.paymentMethod || 'Cash' }) });
+      await fetchApi(`/invoices/${invoice.id}/paid`, { method: 'PUT', body: JSON.stringify({ paymentAmount, paymentMethod }) });
+      setPaymentInvoice(null);
       setSelectedInvoice(null);
       await loadData();
     } catch (err) {
-      setError(err.message || 'Invoice could not be marked paid.');
+      setError(err.message || 'Payment could not be recorded.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -766,7 +824,7 @@ export default function Invoices() {
                       <div className="flex items-center gap-1">
                         <button onClick={() => setSelectedInvoice(inv)} className="rounded-lg p-1.5 text-gray-400 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)]" title="View"><Eye className="h-3.5 w-3.5" /></button>
                         <button onClick={() => { setEditInvoice(inv); setInvoicePrefill(null); setShowForm(true); }} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600" title="Edit"><Edit2 className="h-3.5 w-3.5" /></button>
-                        {inv.status !== 'paid' && inv.status !== 'refunded' && <button onClick={() => markPaid(inv)} className="rounded-lg p-1.5 text-gray-400 hover:bg-green-50 hover:text-green-600" title="Mark paid"><CheckCircle className="h-3.5 w-3.5" /></button>}
+                        {!['paid', 'refunded', 'cancelled'].includes(inv.status) && <button onClick={() => setPaymentInvoice(inv)} className="rounded-lg p-1.5 text-gray-400 hover:bg-green-50 hover:text-green-600" title="Record payment"><WalletCards className="h-3.5 w-3.5" /></button>}
                         <button onClick={() => downloadPdf(inv)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="PDF"><Download className="h-3.5 w-3.5" /></button>
                         {canAdminInvoice && inv.status !== 'cancelled' && <button onClick={() => { setConfirmInvoice(inv); setConfirmAction('cancel'); }} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600" title="Cancel invoice"><Trash2 className="h-3.5 w-3.5" /></button>}
                       </div>
@@ -792,7 +850,8 @@ export default function Invoices() {
       )}
 
       <InvoiceFormModal isOpen={showForm} onClose={() => { setShowForm(false); setEditInvoice(null); setInvoicePrefill(null); }} onSave={saveInvoice} invoice={editInvoice} prefill={invoicePrefill} clients={clients} services={services} appointments={appointments} saving={saving} onPatientSelected={rememberPatient} />
-      <InvoiceDetailModal invoice={selectedInvoice} isOpen={!!selectedInvoice} onClose={() => setSelectedInvoice(null)} onMarkPaid={markPaid} onRefund={(invoice) => { setConfirmInvoice(invoice); setConfirmAction('refund'); }} onDownload={downloadPdf} onPrint={printPdf} onShareWhatsapp={shareInvoiceWhatsapp} canAdminInvoice={canAdminInvoice} />
+      <InvoiceDetailModal invoice={selectedInvoice} isOpen={!!selectedInvoice} onClose={() => setSelectedInvoice(null)} onMarkPaid={setPaymentInvoice} onRefund={(invoice) => { setConfirmInvoice(invoice); setConfirmAction('refund'); }} onDownload={downloadPdf} onPrint={printPdf} onShareWhatsapp={shareInvoiceWhatsapp} canAdminInvoice={canAdminInvoice} />
+      <RecordPaymentModal invoice={paymentInvoice} onClose={() => setPaymentInvoice(null)} onSave={recordPayment} saving={saving} />
       <InvoiceActionConfirmModal
         invoice={confirmInvoice}
         action={confirmAction}

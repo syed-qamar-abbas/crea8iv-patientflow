@@ -4,8 +4,45 @@ require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../services/pdfService.php';
 require_once __DIR__ . '/../services/invoiceMath.php';
 require_once __DIR__ . '/../services/dentalFinancialService.php';
+require_once __DIR__ . '/../services/invoicePaymentService.php';
 
 class InvoiceController {
+    private function excludedFromCollections($status) {
+        return in_array($status, ['refunded', 'cancelled'], true);
+    }
+
+    private function recordPaymentTransition($db, $user, $invoiceId, $clientId, $oldAmount, $oldStatus, $newAmount, $newStatus, $paymentMethod) {
+        $oldAmount = floatval($oldAmount);
+        $newAmount = floatval($newAmount);
+        $oldExcluded = $this->excludedFromCollections($oldStatus);
+        $newExcluded = $this->excludedFromCollections($newStatus);
+
+        if ($oldExcluded && $newExcluded) return;
+        if ($oldExcluded && !$newExcluded) {
+            $delta = $newAmount;
+            $type = 'adjustment';
+        } elseif (!$oldExcluded && $newExcluded) {
+            $delta = -$oldAmount;
+            $type = $newStatus === 'refunded' ? 'refund' : 'cancellation';
+        } else {
+            $delta = $newAmount - $oldAmount;
+            $type = $delta >= 0 ? 'payment' : 'adjustment';
+        }
+
+        pf_record_invoice_payment_event(
+            $db,
+            $user['clinicId'],
+            $invoiceId,
+            $clientId,
+            $delta,
+            $type,
+            $paymentMethod,
+            $user['id'] ?? null,
+            null,
+            $type === 'payment' ? 'Invoice payment received' : 'Invoice collection adjusted'
+        );
+    }
+
     // Record the clinic's INTERNAL cost for an invoice (never shown to the
     // patient / not on the PDF). Feeds per-patient net profit + clinic P&L via
     // InvoiceProcedureCost. Only privileged roles may set it. Passing null skips.
@@ -280,6 +317,47 @@ class InvoiceController {
         send_json($formatted);
     }
 
+    public function payments($input, $user) {
+        $from = $_GET['from'] ?? date('Y-m-d');
+        $to = $_GET['to'] ?? $from;
+        if (!pf_valid_date($from) || !pf_valid_date($to) || $from > $to) {
+            send_error('Invalid payment date range', 400);
+        }
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = min(500, max(1, intval($_GET['limit'] ?? 100)));
+        $offset = ($page - 1) * $limit;
+
+        $db = DB::getConnection();
+        $params = [$user['clinicId'], $from . ' 00:00:00', $to . ' 23:59:59'];
+        $where = "p.clinicId = ? AND p.paidAt >= ? AND p.paidAt <= ?";
+
+        $stmtCount = $db->prepare("SELECT COUNT(*), COALESCE(SUM(p.amount), 0) FROM InvoicePaymentEntry p WHERE $where");
+        $stmtCount->execute($params);
+        $countRow = $stmtCount->fetch(PDO::FETCH_NUM) ?: [0, 0];
+        $total = intval($countRow[0]);
+
+        $stmt = $db->prepare("SELECT p.*, i.invoiceNo, c.name AS clientName
+            FROM InvoicePaymentEntry p
+            JOIN Invoice i ON i.id = p.invoiceId AND i.clinicId = p.clinicId
+            JOIN Client c ON c.id = p.clientId AND c.clinicId = p.clinicId
+            WHERE $where
+            ORDER BY p.paidAt DESC, p.createdAt DESC
+            LIMIT $limit OFFSET $offset");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$row) $row['amount'] = floatval($row['amount'] ?? 0);
+        unset($row);
+
+        send_json([
+            'payments' => $rows,
+            'totalAmount' => floatval($countRow[1] ?? 0),
+            'total' => $total,
+            'page' => $page,
+            'pages' => max(1, (int)ceil($total / $limit)),
+            'limit' => $limit,
+        ]);
+    }
+
     public function getById($input, $user, $id) {
         $db = DB::getConnection();
         $sql = "SELECT i.*,
@@ -384,6 +462,13 @@ class InvoiceController {
                 $invoiceId, $user['clinicId'], $clientId, $appointmentId, $invoiceNo, json_encode($totals['items']), $totals['subtotal'], $previousBalance, $totals['discount'], $totals['tax'], $totals['total'], $totals['grandTotal'], $totals['amountPaid'], $totals['balanceDue'], $totals['status'], $paymentMethod, $notes, $dueDate
             ]);
 
+            if ($totals['amountPaid'] > 0) {
+                pf_record_invoice_payment_event(
+                    $db, $user['clinicId'], $invoiceId, $clientId, $totals['amountPaid'],
+                    'payment', $paymentMethod, $user['id'] ?? null, null, 'Initial invoice payment'
+                );
+            }
+
             if (array_key_exists('procedureCost', $input)) {
                 $this->saveInternalCost($db, $user, $invoiceId, $clientId, $appointmentId, $input['procedureCost'], $totals['grandTotal']);
             }
@@ -441,7 +526,7 @@ class InvoiceController {
         $this->assertAppointmentInClinic($db, $appointmentId, $user['clinicId'], $clientId, $id);
 
         $totals = $this->calculateTotals($items, $discountPercent, $taxPercent, $previousBalance, $amountPaid);
-        $finalStatus = $status ?: $totals['status'];
+        $finalStatus = in_array($status, ['refunded', 'cancelled'], true) ? $status : $totals['status'];
         $paidAt = $finalStatus === 'paid' ? ($existing['paidAt'] ?: date('Y-m-d H:i:s')) : null;
 
         try {
@@ -473,6 +558,16 @@ class InvoiceController {
                 $user['clinicId']
             ]);
 
+            if ($clientId !== $existing['clientId']) {
+                $db->prepare("UPDATE InvoicePaymentEntry SET clientId = ? WHERE invoiceId = ? AND clinicId = ?")
+                   ->execute([$clientId, $id, $user['clinicId']]);
+            }
+            $this->recordPaymentTransition(
+                $db, $user, $id, $clientId,
+                $existing['amountPaid'], $existing['status'],
+                $totals['amountPaid'], $finalStatus, $paymentMethod
+            );
+
             if (array_key_exists('procedureCost', $input)) {
                 $this->saveInternalCost($db, $user, $id, $clientId, $appointmentId, $input['procedureCost'], $totals['grandTotal']);
             }
@@ -499,8 +594,12 @@ class InvoiceController {
     public function markPaid($input, $user, $id) {
         $paymentMethod = $input['paymentMethod'] ?? null;
         $amountPaid = isset($input['amountPaid']) ? floatval($input['amountPaid']) : null;
+        $paymentAmount = isset($input['paymentAmount']) ? floatval($input['paymentAmount']) : null;
         if ($amountPaid !== null && $amountPaid < 0) {
             send_error('amountPaid cannot be negative', 400);
+        }
+        if ($paymentAmount !== null && $paymentAmount <= 0) {
+            send_error('Payment amount must be greater than zero', 400);
         }
 
         $db = DB::getConnection();
@@ -512,20 +611,41 @@ class InvoiceController {
         if (!$existing) {
             send_error('Invoice not found', 404);
         }
+        if ($this->excludedFromCollections($existing['status'])) {
+            send_error('Refunded or cancelled invoices cannot receive payments', 409);
+        }
 
         $grandTotal = floatval($existing['grandTotal'] ?: $existing['total']);
-        $paid = $amountPaid === null ? $grandTotal : $amountPaid;
+        $paymentMethod = $paymentMethod ?: ($existing['paymentMethod'] ?: 'Cash');
+        $paid = $paymentAmount !== null
+            ? floatval($existing['amountPaid']) + $paymentAmount
+            : ($amountPaid === null ? $grandTotal : $amountPaid);
+        if ($paid > $grandTotal + 0.005) {
+            send_error('Payment exceeds the remaining invoice balance', 400);
+        }
         $balanceDue = max(0.0, $grandTotal - $paid);
         $status = $balanceDue <= 0 ? 'paid' : 'partial';
         $paidAt = $balanceDue <= 0 ? date('Y-m-d H:i:s') : null;
-
-        $diffPaid = max(0.0, $paid - floatval($existing['amountPaid']));
 
         try {
             $db->beginTransaction();
 
             $stmtUpdate = $db->prepare("UPDATE Invoice SET status = ?, amountPaid = ?, balanceDue = ?, paymentMethod = ?, paidAt = ? WHERE id = ? AND clinicId = ?");
             $stmtUpdate->execute([$status, $paid, $balanceDue, $paymentMethod, $paidAt, $id, $user['clinicId']]);
+
+            $this->recordPaymentTransition(
+                $db, $user, $id, $existing['clientId'],
+                $existing['amountPaid'], $existing['status'],
+                $paid, $status, $paymentMethod
+            );
+            $receivedNow = max(0.0, $paid - floatval($existing['amountPaid']));
+            if ($receivedNow > 0) {
+                log_audit($user['clinicId'], $user['id'] ?? null, 'invoice_payment_recorded', 'Invoice', $id, null, [
+                    'amount' => $receivedNow,
+                    'paymentMethod' => $paymentMethod,
+                    'balanceDue' => $balanceDue,
+                ]);
+            }
 
             $this->recomputeClientTotals($db, $user['clinicId'], $existing['clientId']);
 
@@ -546,18 +666,25 @@ class InvoiceController {
     public function refund($input, $user, $id) {
         $db = DB::getConnection();
         
-        $stmt = $db->prepare("SELECT clientId, amountPaid FROM Invoice WHERE id = ? AND clinicId = ?");
+        $stmt = $db->prepare("SELECT clientId, amountPaid, status, paymentMethod FROM Invoice WHERE id = ? AND clinicId = ?");
         $stmt->execute([$id, $user['clinicId']]);
         $invoice = $stmt->fetch();
         if (!$invoice) {
             send_error('Invoice not found', 404);
         }
+        if ($invoice['status'] === 'refunded') send_error('Invoice is already refunded', 409);
 
         try {
             $db->beginTransaction();
 
             $stmtUpdate = $db->prepare("UPDATE Invoice SET status = 'refunded' WHERE id = ? AND clinicId = ?");
             $stmtUpdate->execute([$id, $user['clinicId']]);
+
+            $this->recordPaymentTransition(
+                $db, $user, $id, $invoice['clientId'],
+                $invoice['amountPaid'], $invoice['status'],
+                $invoice['amountPaid'], 'refunded', $invoice['paymentMethod']
+            );
 
             $this->recomputeClientTotals($db, $user['clinicId'], $invoice['clientId']);
 
@@ -573,7 +700,7 @@ class InvoiceController {
     public function remove($input, $user, $id) {
         $db = DB::getConnection();
 
-        $stmt = $db->prepare("SELECT clientId FROM Invoice WHERE id = ? AND clinicId = ?");
+        $stmt = $db->prepare("SELECT clientId, amountPaid, status, paymentMethod FROM Invoice WHERE id = ? AND clinicId = ?");
         $stmt->execute([$id, $user['clinicId']]);
         $invoice = $stmt->fetch();
 
@@ -586,6 +713,12 @@ class InvoiceController {
 
             $stmtArchive = $db->prepare("UPDATE Invoice SET status = 'cancelled', balanceDue = 0 WHERE id = ? AND clinicId = ?");
             $stmtArchive->execute([$id, $user['clinicId']]);
+
+            $this->recordPaymentTransition(
+                $db, $user, $id, $invoice['clientId'],
+                $invoice['amountPaid'], $invoice['status'],
+                $invoice['amountPaid'], 'cancelled', $invoice['paymentMethod']
+            );
 
             $this->recomputeClientTotals($db, $user['clinicId'], $invoice['clientId']);
 

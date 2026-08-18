@@ -392,6 +392,7 @@ $routes = [
     // Invoices Routes
     ['GET', '^api/v1/invoices$', 'InvoiceController', 'list', ['owner', 'manager', 'accountant', 'receptionist']],
     ['POST', '^api/v1/invoices$', 'InvoiceController', 'create', ['owner', 'manager', 'accountant', 'receptionist']],
+    ['GET', '^api/v1/invoices/payments$', 'InvoiceController', 'payments', ['owner', 'manager', 'accountant', 'receptionist']],
     ['PUT', '^api/v1/invoices/([^/]+)/paid$', 'InvoiceController', 'markPaid', ['owner', 'manager', 'accountant', 'receptionist']],
     ['PUT', '^api/v1/invoices/([^/]+)/refund$', 'InvoiceController', 'refund', ['owner', 'manager', 'accountant']],
     ['GET', '^api/v1/invoices/([^/]+)/pdf$', 'InvoiceController', 'getPDF', ['owner', 'manager', 'accountant', 'receptionist']],
@@ -411,6 +412,7 @@ $routes = [
     ['GET', '^api/v1/financials/summary$', 'FinancialController', 'getSummary', ['owner', 'manager', 'accountant']],
     ['GET', '^api/v1/financials/monthly$', 'FinancialController', 'getMonthly', ['owner', 'manager', 'accountant']],
     ['GET', '^api/v1/financials/transactions$', 'FinancialController', 'getTransactions', ['owner', 'manager', 'accountant']],
+    ['GET', '^api/v1/financials/procedure-expenses$', 'FinancialController', 'getProcedureExpenses', ['owner', 'manager', 'accountant']],
     ['GET', '^api/v1/financials/profitability$', 'FinancialController', 'getProfitability', ['owner', 'manager', 'accountant']],
     ['GET', '^api/v1/invoices/([^/]+)/procedure-costs$', 'FinancialController', 'getProcedureCosts', ['owner', 'manager', 'accountant']],
     ['PUT', '^api/v1/invoices/([^/]+)/procedure-costs$', 'FinancialController', 'saveProcedureCost', ['owner', 'manager', 'accountant']],

@@ -167,6 +167,12 @@ passthru($migrationCommand, $migrationStatus);
 check('focused migration runner suite passes', $migrationStatus === 0);
 
 // ---------------------------------------------------------------------------
+echo "== cash-basis financial ledger integration ==\n";
+$ledgerCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/financial-ledger-tests.php');
+passthru($ledgerCommand, $ledgerStatus);
+check('focused financial ledger suite passes', $ledgerStatus === 0);
+
+// ---------------------------------------------------------------------------
 echo "\n$pass passed, $fail failed\n";
 if ($fail) { echo 'FAILED: ' . implode(' | ', $failures) . "\n"; exit(1); }
 exit(0);

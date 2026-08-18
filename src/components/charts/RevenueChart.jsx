@@ -20,7 +20,7 @@ export default function RevenueChart() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Revenue Overview</h3>
-          <p className="mt-0.5 text-xs text-gray-400">Live paid invoices only</p>
+          <p className="mt-0.5 text-xs text-gray-400">Payments grouped by the date received</p>
         </div>
       </div>
       <div className="min-h-0 flex-1">

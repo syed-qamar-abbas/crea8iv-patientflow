@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
 require_once __DIR__ . '/../services/dentalFinancialService.php';
+require_once __DIR__ . '/../services/invoicePaymentService.php';
 
 class FinancialController {
     private function ensure($user) {
@@ -16,22 +17,24 @@ class FinancialController {
         $db = $this->ensure($user);
 
         // Optional date range — every figure below respects it. Empty = all time.
-        $from = pf_valid_date($_GET['from'] ?? '') ? $_GET['from'] . ' 00:00:00' : null;
-        $to   = pf_valid_date($_GET['to'] ?? '')   ? $_GET['to'] . ' 23:59:59'   : null;
+        $rawFrom = $_GET['from'] ?? '';
+        $rawTo = $_GET['to'] ?? '';
+        if (($rawFrom !== '' || $rawTo !== '') && (!pf_valid_date($rawFrom) || !pf_valid_date($rawTo) || $rawFrom > $rawTo)) {
+            send_error('Invalid financial date range', 400);
+        }
+        $from = $rawFrom !== '' ? $rawFrom . ' 00:00:00' : null;
+        $to = $rawTo !== '' ? $rawTo . ' 23:59:59' : null;
 
-        // Revenue (collected) + Pending (unpaid) from invoices created in range.
-        $invWhere = "clinicId = ?"; $invParams = [$user['clinicId']];
-        if ($from && $to) { $invWhere .= " AND createdAt >= ? AND createdAt <= ?"; $invParams[] = $from; $invParams[] = $to; }
-        $stmt = $db->prepare("
-            SELECT
-                COALESCE(SUM(CASE WHEN status != 'refunded' THEN amountPaid ELSE 0 END), 0) AS totalRevenue,
-                COALESCE(SUM(CASE WHEN status IN ('pending', 'partial') THEN balanceDue ELSE 0 END), 0) AS outstandingPayments
-            FROM Invoice WHERE $invWhere
-        ");
-        $stmt->execute($invParams);
-        $summary = $stmt->fetch();
-        $totalRevenue = floatval($summary['totalRevenue'] ?? 0);
-        $outstandingPayments = floatval($summary['outstandingPayments'] ?? 0);
+        // Cash-basis revenue: attribute money to the date it was actually paid,
+        // including partial payments on invoices from an earlier month.
+        $totalRevenue = pf_invoice_payment_sum($db, $user['clinicId'], $from, $to);
+
+        // Outstanding is a current balance snapshot, so it must not disappear
+        // merely because the invoice was created outside the selected report range.
+        $stmtOutstanding = $db->prepare("SELECT COALESCE(SUM(balanceDue), 0) FROM Invoice
+            WHERE clinicId = ? AND status IN ('pending', 'partial')");
+        $stmtOutstanding->execute([$user['clinicId']]);
+        $outstandingPayments = floatval($stmtOutstanding->fetchColumn() ?: 0);
 
         // General clinic expenses in range (by expense date).
         $expWhere = "clinicId = ? AND archivedAt IS NULL"; $expParams = [$user['clinicId']];
@@ -42,6 +45,7 @@ class FinancialController {
 
         // Procedure costs (internal), for invoices created in range.
         $pcWhere = "pc.clinicId = ?"; $pcParams = [$user['clinicId']];
+        $pcWhere .= " AND i.status NOT IN ('refunded', 'cancelled')";
         if ($from && $to) { $pcWhere .= " AND i.createdAt >= ? AND i.createdAt <= ?"; $pcParams[] = $from; $pcParams[] = $to; }
         $stmtCost = $db->prepare("SELECT COALESCE(SUM(pc.procedureCost), 0) FROM InvoiceProcedureCost pc JOIN Invoice i ON i.id = pc.invoiceId AND i.clinicId = pc.clinicId WHERE $pcWhere");
         $stmtCost->execute($pcParams);
@@ -68,24 +72,28 @@ class FinancialController {
         $db = $this->ensure($user);
         
         $stmt = $db->prepare("
-            SELECT i.amountPaid, i.createdAt, a.specialty
-            FROM Invoice i
+            SELECT p.amount, p.paidAt, a.specialty
+            FROM InvoicePaymentEntry p
+            JOIN Invoice i ON i.id = p.invoiceId AND i.clinicId = p.clinicId
             LEFT JOIN Appointment a ON i.appointmentId = a.id AND a.clinicId = i.clinicId
-            WHERE i.clinicId = ? AND i.status != 'refunded' AND i.amountPaid > 0
+            WHERE p.clinicId = ? AND p.amount != 0
+            ORDER BY p.paidAt ASC
         ");
         $stmt->execute([$user['clinicId']]);
         $invoices = $stmt->fetchAll();
 
         $monthly = [];
         foreach ($invoices as $inv) {
-            $date = strtotime($inv['createdAt']);
+            $date = strtotime($inv['paidAt']);
+            $monthKey = date('Y-m', $date);
             $month = date('M y', $date); // e.g. "Jun 26"
             
-            if (!isset($monthly[$month])) {
-                $monthly[$month] = [
+            if (!isset($monthly[$monthKey])) {
+                $monthly[$monthKey] = [
                     'month' => $month,
                     'dental' => 0.0,
                     'revenue' => 0.0,
+                    'generalExpenses' => 0.0,
                     'expenses' => 0.0,
                     'procedureCosts' => 0.0,
                     'grossProfit' => 0.0,
@@ -95,53 +103,57 @@ class FinancialController {
             }
             
             $specialty = !empty($inv['specialty']) ? $inv['specialty'] : 'dental';
-            if (!isset($monthly[$month][$specialty])) {
-                $monthly[$month][$specialty] = 0.0;
+            if (!isset($monthly[$monthKey][$specialty])) {
+                $monthly[$monthKey][$specialty] = 0.0;
             }
             
-            $amount = floatval($inv['amountPaid']);
-            $monthly[$month][$specialty] += $amount;
-            $monthly[$month]['revenue'] += $amount;
-            $monthly[$month]['total'] += $amount;
+            $amount = floatval($inv['amount']);
+            $monthly[$monthKey][$specialty] += $amount;
+            $monthly[$monthKey]['revenue'] += $amount;
+            $monthly[$monthKey]['total'] += $amount;
         }
 
         $stmtExpense = $db->prepare("SELECT amount, expenseDate FROM Expense WHERE clinicId = ? AND archivedAt IS NULL");
         $stmtExpense->execute([$user['clinicId']]);
         foreach ($stmtExpense->fetchAll() as $row) {
             $date = strtotime($row['expenseDate']);
+            $monthKey = date('Y-m', $date);
             $month = date('M y', $date);
-            if (!isset($monthly[$month])) {
-                $monthly[$month] = [
+            if (!isset($monthly[$monthKey])) {
+                $monthly[$monthKey] = [
                     'month' => $month, 'dental' => 0.0, 'revenue' => 0.0, 'expenses' => 0.0,
-                    'procedureCosts' => 0.0, 'grossProfit' => 0.0, 'netProfit' => 0.0, 'total' => 0.0
+                    'generalExpenses' => 0.0, 'procedureCosts' => 0.0, 'grossProfit' => 0.0, 'netProfit' => 0.0, 'total' => 0.0
                 ];
             }
-            $monthly[$month]['expenses'] += floatval($row['amount']);
+            $monthly[$monthKey]['generalExpenses'] += floatval($row['amount']);
         }
 
         $stmtCosts = $db->prepare("SELECT pc.procedureCost, i.createdAt
             FROM InvoiceProcedureCost pc
             JOIN Invoice i ON i.id = pc.invoiceId AND i.clinicId = pc.clinicId
-            WHERE pc.clinicId = ?");
+            WHERE pc.clinicId = ? AND i.status NOT IN ('refunded', 'cancelled')");
         $stmtCosts->execute([$user['clinicId']]);
         foreach ($stmtCosts->fetchAll() as $row) {
             $date = strtotime($row['createdAt']);
+            $monthKey = date('Y-m', $date);
             $month = date('M y', $date);
-            if (!isset($monthly[$month])) {
-                $monthly[$month] = [
+            if (!isset($monthly[$monthKey])) {
+                $monthly[$monthKey] = [
                     'month' => $month, 'dental' => 0.0, 'revenue' => 0.0, 'expenses' => 0.0,
-                    'procedureCosts' => 0.0, 'grossProfit' => 0.0, 'netProfit' => 0.0, 'total' => 0.0
+                    'generalExpenses' => 0.0, 'procedureCosts' => 0.0, 'grossProfit' => 0.0, 'netProfit' => 0.0, 'total' => 0.0
                 ];
             }
-            $monthly[$month]['procedureCosts'] += floatval($row['procedureCost']);
+            $monthly[$monthKey]['procedureCosts'] += floatval($row['procedureCost']);
         }
 
         foreach ($monthly as &$row) {
+            $row['expenses'] = $row['generalExpenses'] + $row['procedureCosts'];
             $row['grossProfit'] = $row['revenue'] - $row['procedureCosts'];
-            $row['netProfit'] = $row['grossProfit'] - $row['expenses'];
+            $row['netProfit'] = $row['revenue'] - $row['expenses'];
         }
+        unset($row);
 
-        // Return list of grouped values
+        ksort($monthly);
         send_json(array_values($monthly));
     }
 
@@ -160,7 +172,7 @@ class FinancialController {
                 LEFT JOIN Client c ON i.clientId = c.id AND c.clinicId = i.clinicId
                 LEFT JOIN Appointment a ON i.appointmentId = a.id AND a.clinicId = i.clinicId
                 LEFT JOIN Service srv ON a.serviceId = srv.id AND srv.clinicId = i.clinicId
-                WHERE i.clinicId = ?
+                WHERE i.clinicId = ? AND i.status NOT IN ('refunded', 'cancelled')
                 ORDER BY i.createdAt DESC
                 LIMIT ? OFFSET ?";
         
@@ -185,6 +197,56 @@ class FinancialController {
         }
 
         send_json($formatted);
+    }
+
+    public function getProcedureExpenses($input, $user) {
+        $db = $this->ensure($user);
+        $from = $_GET['from'] ?? date('Y-m-01');
+        $to = $_GET['to'] ?? date('Y-m-t');
+        if (!pf_valid_date($from) || !pf_valid_date($to) || $from > $to) send_error('Invalid date range', 400);
+
+        $page = max(1, intval($_GET['page'] ?? 1));
+        $limit = min(100, max(1, intval($_GET['limit'] ?? 20)));
+        $offset = ($page - 1) * $limit;
+        $params = [$user['clinicId'], $from . ' 00:00:00', $to . ' 23:59:59'];
+        $where = "pc.clinicId = ? AND i.status NOT IN ('refunded', 'cancelled') AND i.createdAt >= ? AND i.createdAt <= ?";
+
+        $stmtTotals = $db->prepare("SELECT COUNT(*), COALESCE(SUM(pc.procedureCost), 0)
+            FROM InvoiceProcedureCost pc JOIN Invoice i ON i.id = pc.invoiceId AND i.clinicId = pc.clinicId
+            WHERE $where");
+        $stmtTotals->execute($params);
+        $totals = $stmtTotals->fetch(PDO::FETCH_NUM) ?: [0, 0];
+        $total = intval($totals[0]);
+
+        $descriptionExpr = DB_DRIVER === 'sqlite'
+            ? "COALESCE(s.name, 'Invoice item')"
+            : "COALESCE(s.name, JSON_UNQUOTE(JSON_EXTRACT(i.items, CONCAT('$[', pc.invoiceItemIndex, '].description'))), 'Invoice item')";
+        $stmt = $db->prepare("SELECT pc.id, pc.invoiceId, pc.invoiceItemIndex, pc.patientCharge, pc.procedureCost,
+                pc.notes, i.invoiceNo, i.createdAt AS expenseDate, c.name AS clientName,
+                $descriptionExpr AS procedureName
+            FROM InvoiceProcedureCost pc
+            JOIN Invoice i ON i.id = pc.invoiceId AND i.clinicId = pc.clinicId
+            JOIN Client c ON c.id = pc.clientId AND c.clinicId = pc.clinicId
+            LEFT JOIN Service s ON s.id = pc.serviceId AND s.clinicId = pc.clinicId
+            WHERE $where
+            ORDER BY i.createdAt DESC, pc.invoiceItemIndex ASC
+            LIMIT $limit OFFSET $offset");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$row) {
+            $row['patientCharge'] = floatval($row['patientCharge'] ?? 0);
+            $row['procedureCost'] = floatval($row['procedureCost'] ?? 0);
+        }
+        unset($row);
+
+        send_json([
+            'expenses' => $rows,
+            'totalAmount' => floatval($totals[1] ?? 0),
+            'totalRecords' => $total,
+            'page' => $page,
+            'pages' => max(1, (int)ceil($total / $limit)),
+            'limit' => $limit,
+        ]);
     }
 
     public function getProcedureCosts($input, $user, $invoiceId) {
@@ -278,7 +340,7 @@ class FinancialController {
             FROM InvoiceProcedureCost pc
             JOIN Invoice i ON i.id = pc.invoiceId AND i.clinicId = pc.clinicId
             LEFT JOIN Service s ON s.id = pc.serviceId AND s.clinicId = pc.clinicId
-            WHERE pc.clinicId = ?
+            WHERE pc.clinicId = ? AND i.status NOT IN ('refunded', 'cancelled')
             GROUP BY procedureName
             ORDER BY (COALESCE(SUM(pc.patientCharge), 0) - COALESCE(SUM(pc.procedureCost), 0)) DESC
             LIMIT 25");
@@ -287,8 +349,9 @@ class FinancialController {
                     COUNT(*) AS cases, COALESCE(SUM(pc.patientCharge), 0) AS revenue,
                     COALESCE(SUM(pc.procedureCost), 0) AS procedureCost
                 FROM InvoiceProcedureCost pc
+                JOIN Invoice i ON i.id = pc.invoiceId AND i.clinicId = pc.clinicId
                 LEFT JOIN Service s ON s.id = pc.serviceId AND s.clinicId = pc.clinicId
-                WHERE pc.clinicId = ?
+                WHERE pc.clinicId = ? AND i.status NOT IN ('refunded', 'cancelled')
                 GROUP BY procedureName
                 ORDER BY (COALESCE(SUM(pc.patientCharge), 0) - COALESCE(SUM(pc.procedureCost), 0)) DESC
                 LIMIT 25");
