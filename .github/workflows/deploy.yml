@@ -67,7 +67,14 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 20 -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null; then
+              break
+            fi
+            echo "Hostinger SSH handshake attempt ${attempt} failed; retrying..."
+            sleep 10
+          done
+          test -s ~/.ssh/known_hosts
 
       - name: Deploy clinic portal
         run: |
