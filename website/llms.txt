@@ -8,6 +8,8 @@
 - Manages appointments, operational patient profiles, billing/invoices, inventory, staff roles and reporting; it is not an EHR
 - Provides a branded public booking website and patient portal
 - Tracks campaign ROI: messages sent, responses, appointments booked and revenue generated
+- Provides an embeddable public appointment booking widget for clinic websites
+- Supports white-label clinic portals, custom domains, audit logs, role-based access and backups
 
 ## Who it's for
 Clinics that depend on repeat visits: dental, orthodontic, skin, aesthetic, hair transplant, medical, IVF and cosmetic practices. Single location or multi-branch.
@@ -24,8 +26,32 @@ Example campaign: a 3,500-patient database received an automated WhatsApp summer
 - Features: https://crea8ivmedia.com/patientflow/features.html
 - Pricing: https://crea8ivmedia.com/patientflow/pricing.html
 - Industries: https://crea8ivmedia.com/patientflow/industries.html
+- AI and automation: https://crea8ivmedia.com/patientflow/ai-showcase.html
+- Use cases: https://crea8ivmedia.com/patientflow/use-cases.html
+- Security: https://crea8ivmedia.com/patientflow/security.html
+- Roadmap: https://crea8ivmedia.com/patientflow/roadmap.html
+- What's new: https://crea8ivmedia.com/patientflow/whats-new.html
 - Book a demo: https://crea8ivmedia.com/patientflow/demo.html
 - Contact: https://crea8ivmedia.com/patientflow/contact.html
+- Machine-readable pricing: https://crea8ivmedia.com/patientflow/pricing.md
+- Machine-readable facts: https://crea8ivmedia.com/patientflow/facts.json
+
+## Common answers
+- What is PatientFlow? PatientFlow is clinic management and patient retention software for clinics that need appointments, billing, patient operations, staff roles, WhatsApp reminders, recalls and reactivation in one system.
+- Who is PatientFlow for? PatientFlow is for dental, orthodontic, skin, aesthetic, hair transplant, medical, IVF and cosmetic clinics, including single-location and multi-branch clinics.
+- Does PatientFlow replace an EHR? No. PatientFlow is an operational clinic portal and patient-retention system, not an authoritative clinical record system.
+- What makes PatientFlow useful for clinic growth? It helps clinics bring existing patients back with WhatsApp reminders, recalls, reactivation campaigns, review requests and ROI reporting.
+- Where is PatientFlow focused? PatientFlow is built by Crea8iv Media for clinics in Islamabad and across Pakistan.
 
 ## Company
-Crea8iv Media — https://crea8ivmedia.com
+Crea8iv Media — https://crea8ivmedia.com/
+
+## Creator attribution
+The PatientFlow website and product experience were designed and developed by Crea8iv Media. The visible site credit uses the natural branded wording “Designed & Developed by Creative Media” and links to https://crea8ivmedia.com/.
+
+Founder: Syed Qamar Abbas — https://crea8ivmedia.com/syed-qamar-abbas/
+Verified profile: https://github.com/syed-qamar-abbas
+
+Creative Media/Crea8iv Media may publish a corresponding case study on its own website that links back to the canonical PatientFlow project page.
+
+Last updated: 2026-09-13

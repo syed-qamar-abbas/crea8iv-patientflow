@@ -424,6 +424,7 @@ class AdminController {
         $password = $this->generateTenantPassword();
         $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
         $db->prepare("UPDATE User SET password = ? WHERE id = ?")->execute([$hash, $owner['id']]);
+        $db->prepare("DELETE FROM RefreshToken WHERE userId = ?")->execute([$owner['id']]);
         $this->storeOwnerCredential($db, $id, $owner['id'], $owner['email'], $password, $owner['username'] ?? '');
 
         log_audit($id, $user['id'], 'tenant_owner_password_reset', 'User', $owner['id'], null, ['username' => $owner['username'] ?? null, 'email' => $owner['email']]);
@@ -884,7 +885,8 @@ class AdminController {
         ], 201);
     }
 
-    // Edit a clinic's core details + branding (superadmin).
+    // Edit a clinic's core details, branding, and owner handover login
+    // without touching any patient, appointment, invoice, or financial rows.
     public function updateTenant($input, $user, $id) {
         $db = DB::getConnection();
         $stmt = $db->prepare("SELECT id FROM Clinic WHERE id = ? AND id != 'platform'");
@@ -896,12 +898,141 @@ class AdminController {
         foreach ($allowed as $f) {
             if (array_key_exists($f, $input)) { $sets[] = "$f = ?"; $params[] = trim((string)$input[$f]); }
         }
-        if (!$sets) send_error('No fields to update', 400);
-        $params[] = $id;
-        $db->prepare("UPDATE Clinic SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
 
-        log_audit($id, $user['id'], 'tenant_updated', 'Clinic', $id, null, array_intersect_key($input, array_flip($allowed)));
-        send_json(['message' => 'Clinic updated']);
+        $ownerInput = is_array($input['owner'] ?? null) ? $input['owner'] : [];
+        $ownerFields = [];
+        $ownerParams = [];
+        $ownerChanged = [];
+        $passwordChanged = false;
+        $owner = null;
+        $updatedOwner = null;
+        $credentials = null;
+
+        if ($ownerInput) {
+            $ownerStmt = $db->prepare(
+                "SELECT id, name, username, email FROM User WHERE clinicId = ? AND isActive = 1
+                 ORDER BY (role = 'owner') DESC, createdAt ASC LIMIT 1"
+            );
+            $ownerStmt->execute([$id]);
+            $owner = $ownerStmt->fetch();
+            if (!$owner) send_error('This clinic has no active owner user to update.', 404);
+
+            if (array_key_exists('name', $ownerInput)) {
+                $ownerName = trim((string)$ownerInput['name']);
+                if ($ownerName === '') send_error('Owner name is required', 400);
+                if ($ownerName !== ($owner['name'] ?? '')) {
+                    $ownerFields[] = 'name = ?';
+                    $ownerParams[] = $ownerName;
+                    $ownerChanged['name'] = $ownerName;
+                }
+            }
+
+            if (array_key_exists('username', $ownerInput)) {
+                $rawUsername = trim((string)$ownerInput['username']);
+                if ($rawUsername === '') send_error('Owner username is required', 400);
+                try {
+                    $ownerUsername = pf_username_validate(pf_username_sanitize_base($rawUsername));
+                } catch (InvalidArgumentException $e) {
+                    send_error($e->getMessage(), 400);
+                }
+                if ($ownerUsername !== ($owner['username'] ?? '')) {
+                    if (!pf_username_available($db, $ownerUsername, $owner['id'])) {
+                        send_error('Owner username is already in use', 409);
+                    }
+                    $ownerFields[] = 'username = ?';
+                    $ownerParams[] = $ownerUsername;
+                    $ownerChanged['username'] = $ownerUsername;
+                }
+            }
+
+            if (array_key_exists('email', $ownerInput)) {
+                $ownerEmail = strtolower(trim((string)$ownerInput['email']));
+                if ($ownerEmail === '' || !filter_var($ownerEmail, FILTER_VALIDATE_EMAIL)) {
+                    send_error('A valid owner email is required', 400);
+                }
+                if ($ownerEmail !== ($owner['email'] ?? '')) {
+                    $check = $db->prepare("SELECT id FROM User WHERE email = ? AND id != ? LIMIT 1");
+                    $check->execute([$ownerEmail, $owner['id']]);
+                    if ($check->fetch()) send_error('Owner email is already in use', 409);
+                    $ownerFields[] = 'email = ?';
+                    $ownerParams[] = $ownerEmail;
+                    $ownerChanged['email'] = $ownerEmail;
+                }
+            }
+
+            if (array_key_exists('password', $ownerInput)) {
+                $ownerPassword = (string)$ownerInput['password'];
+                if (trim($ownerPassword) !== '') {
+                    if (strlen($ownerPassword) < 10) send_error('Owner password must be at least 10 characters', 400);
+                    $ownerFields[] = 'password = ?';
+                    $ownerParams[] = password_hash($ownerPassword, PASSWORD_BCRYPT, ['cost' => 12]);
+                    $ownerChanged['passwordChanged'] = true;
+                    $passwordChanged = true;
+                }
+            }
+        }
+
+        if (!$sets && !$ownerFields) send_error('No fields to update', 400);
+
+        try {
+            $db->beginTransaction();
+
+            if ($sets) {
+                $params[] = $id;
+                $db->prepare("UPDATE Clinic SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
+            }
+
+            if ($ownerFields && $owner) {
+                $ownerParams[] = $owner['id'];
+                $db->prepare("UPDATE User SET " . implode(', ', $ownerFields) . " WHERE id = ?")->execute($ownerParams);
+                if ($passwordChanged) {
+                    $db->prepare("DELETE FROM RefreshToken WHERE userId = ?")->execute([$owner['id']]);
+                    try {
+                        $db->prepare("UPDATE PasswordReset SET usedAt = CURRENT_TIMESTAMP WHERE userId = ? AND usedAt IS NULL")->execute([$owner['id']]);
+                    } catch (Exception $ignored) {
+                        // Older installs may not have password reset history yet.
+                    }
+                }
+            }
+
+            if ($owner && ($ownerFields || $passwordChanged)) {
+                $freshStmt = $db->prepare("SELECT id, name, username, email FROM User WHERE id = ? LIMIT 1");
+                $freshStmt->execute([$owner['id']]);
+                $updatedOwner = $freshStmt->fetch() ?: $owner;
+                $currentCredential = $this->getOwnerCredential($db, $id);
+                $handoverPassword = $passwordChanged
+                    ? (string)$ownerInput['password']
+                    : ($currentCredential['password'] ?? '');
+                $this->storeOwnerCredential(
+                    $db,
+                    $id,
+                    $updatedOwner['id'],
+                    $updatedOwner['email'],
+                    $handoverPassword,
+                    $updatedOwner['username'] ?? ''
+                );
+            }
+
+            $db->commit();
+        } catch (Exception $e) {
+            $db->rollBack();
+            error_log('updateTenant failed: ' . $e->getMessage());
+            send_error('Clinic update failed: ' . $e->getMessage(), 500);
+        }
+
+        $auditPayload = array_intersect_key($input, array_flip($allowed));
+        if ($ownerChanged) $auditPayload['owner'] = $ownerChanged;
+        log_audit($id, $user['id'], 'tenant_updated', 'Clinic', $id, null, $auditPayload);
+
+        if ($owner) {
+            $credentials = $this->getOwnerCredential($db, $id);
+        }
+
+        send_json([
+            'message' => 'Clinic updated',
+            'owner' => $updatedOwner,
+            'credentials' => $credentials,
+        ]);
     }
 
     // Archive a clinic without deleting patient, billing, appointment or media data.

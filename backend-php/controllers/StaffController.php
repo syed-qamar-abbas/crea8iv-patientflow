@@ -35,20 +35,31 @@ class StaffController {
             $params[] = $branchId;
         }
 
-        // Per-staff appointment counts + generated revenue, so the staff cards
-        // and profile show real numbers (previously these fields were never
-        // populated and always rendered 0). Correlated subqueries keyed on the
-        // indexed (clinicId, …, staffId) columns.
+        // Per-staff appointment counts + generated revenue. Revenue must not
+        // depend only on an invoice being linked, because many clinics bill
+        // manually after booking; use valid linked invoice totals when present
+        // and fall back to the appointment price otherwise.
         $firstOfMonth = date('Y-m-01');
         $whereSql = implode(" AND ", $where);
+        $revenueSql = "SELECT COALESCE(SUM(
+                           CASE
+                             WHEN i.id IS NOT NULL AND i.status IN ('refunded', 'cancelled') THEN 0
+                             WHEN i.id IS NOT NULL THEN COALESCE(NULLIF(i.total, 0), NULLIF(i.grandTotal, 0), NULLIF(i.amountPaid, 0), a.price, 0)
+                             ELSE COALESCE(a.price, 0)
+                           END
+                         ), 0)
+                       FROM Appointment a
+                       LEFT JOIN Invoice i ON i.appointmentId = a.id AND i.clinicId = a.clinicId
+                       WHERE a.staffId = s.id AND a.clinicId = s.clinicId
+                         AND a.status NOT IN ('cancelled', 'no-show')";
         $sql = "SELECT s.*,
                     (SELECT COUNT(*) FROM Appointment a
-                       WHERE a.staffId = s.id AND a.clinicId = s.clinicId) AS appointmentsHandled,
+                       WHERE a.staffId = s.id AND a.clinicId = s.clinicId
+                         AND a.status NOT IN ('cancelled', 'no-show')) AS appointmentsHandled,
                     (SELECT COUNT(*) FROM Appointment a
-                       WHERE a.staffId = s.id AND a.clinicId = s.clinicId AND a.date >= ?) AS appointmentsThisMonth,
-                    (SELECT COALESCE(SUM(i.total), 0) FROM Invoice i
-                       JOIN Appointment a ON i.appointmentId = a.id
-                       WHERE a.staffId = s.id AND a.clinicId = s.clinicId) AS revenue
+                       WHERE a.staffId = s.id AND a.clinicId = s.clinicId
+                         AND a.status NOT IN ('cancelled', 'no-show') AND a.date >= ?) AS appointmentsThisMonth,
+                    ($revenueSql) AS revenue
                 FROM Staff s WHERE $whereSql ORDER BY s.name ASC";
         // The month subquery's placeholder comes before the WHERE params in SQL order.
         $stmt = $db->prepare($sql);
@@ -214,21 +225,29 @@ class StaffController {
         $firstOfMonth = date('Y-m-01');
 
         // Total appointments count
-        $stmtAll = $db->prepare("SELECT COUNT(*) FROM Appointment WHERE staffId = ? AND clinicId = ?");
+        $stmtAll = $db->prepare("SELECT COUNT(*) FROM Appointment WHERE staffId = ? AND clinicId = ? AND status NOT IN ('cancelled', 'no-show')");
         $stmtAll->execute([$id, $user['clinicId']]);
         $allAppts = intval($stmtAll->fetchColumn());
 
         // Month appointments count
-        $stmtMonth = $db->prepare("SELECT COUNT(*) FROM Appointment WHERE staffId = ? AND clinicId = ? AND date >= ?");
+        $stmtMonth = $db->prepare("SELECT COUNT(*) FROM Appointment WHERE staffId = ? AND clinicId = ? AND status NOT IN ('cancelled', 'no-show') AND date >= ?");
         $stmtMonth->execute([$id, $user['clinicId'], $firstOfMonth]);
         $monthAppts = intval($stmtMonth->fetchColumn());
 
-        // Total revenue
+        // Total generated revenue: linked invoice total when available, otherwise
+        // the appointment price so unbilled historical bookings still count.
         $stmtRev = $db->prepare("
-            SELECT SUM(i.total) 
-            FROM Invoice i 
-            JOIN Appointment a ON i.appointmentId = a.id 
+            SELECT COALESCE(SUM(
+                CASE
+                  WHEN i.id IS NOT NULL AND i.status IN ('refunded', 'cancelled') THEN 0
+                  WHEN i.id IS NOT NULL THEN COALESCE(NULLIF(i.total, 0), NULLIF(i.grandTotal, 0), NULLIF(i.amountPaid, 0), a.price, 0)
+                  ELSE COALESCE(a.price, 0)
+                END
+            ), 0)
+            FROM Appointment a
+            LEFT JOIN Invoice i ON i.appointmentId = a.id AND i.clinicId = a.clinicId
             WHERE a.staffId = ? AND a.clinicId = ?
+              AND a.status NOT IN ('cancelled', 'no-show')
         ");
         $stmtRev->execute([$id, $user['clinicId']]);
         $revenue = floatval($stmtRev->fetchColumn() ?: 0);

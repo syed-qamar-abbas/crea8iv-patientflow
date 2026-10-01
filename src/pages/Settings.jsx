@@ -549,6 +549,7 @@ export default function Settings() {
   const [localVision, setLocalVision] = useState(clinicInfo.vision || '');
   const [localServicesOverview, setLocalServicesOverview] = useState(clinicInfo.servicesOverview || '');
   const [logoError, setLogoError] = useState('');
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   useEffect(() => {
     // The server (Clinic table) is the source of truth — seed the form from it
@@ -585,7 +586,10 @@ export default function Settings() {
         if (clinic.secondaryColor) setLocalSecondary(clinic.secondaryColor);
         if (clinic.font) setLocalFont(clinic.font);
       })
-      .catch(() => { /* roles without access keep context values */ });
+      .catch(() => { /* roles without access keep context values */ })
+      .finally(() => {
+        if (!cancelled) setSettingsLoaded(true);
+      });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -706,7 +710,7 @@ export default function Settings() {
     invoicePrefix: localInvoicePrefix, paymentTerms: localPaymentTerms, invoiceFooter: localInvoiceFooter,
     bankName: localBankName, accountTitle: localAccountTitle, accountNumber: localAccountNumber, iban: localIban,
   };
-  const missingRequired = missingClinicFields(requiredValues);
+  const missingRequired = settingsLoaded ? missingClinicFields(requiredValues) : [];
   // Red border helper for required fields that are still empty.
   const reqCls = (val) => (isFilled(val) ? 'border-gray-200' : 'border-red-400 ring-1 ring-red-200');
 

@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://crea8ivmedia.com/patientflow/</loc><lastmod>2026-06-22</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-  <url><loc>https://crea8ivmedia.com/patientflow/features.html</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://crea8ivmedia.com/patientflow/pricing.html</loc><lastmod>2026-07-02</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/</loc><lastmod>2026-09-13</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/features.html</loc><lastmod>2026-09-13</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/pricing.html</loc><lastmod>2026-09-13</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
   <url><loc>https://crea8ivmedia.com/patientflow/package.html?plan=starter</loc><lastmod>2026-07-02</lastmod><changefreq>monthly</changefreq><priority>0.85</priority></url>
   <url><loc>https://crea8ivmedia.com/patientflow/package.html?plan=ai</loc><lastmod>2026-07-02</lastmod><changefreq>monthly</changefreq><priority>0.85</priority></url>
-  <url><loc>https://crea8ivmedia.com/patientflow/live-demo.html</loc><lastmod>2026-07-02</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://crea8ivmedia.com/patientflow/ai-showcase.html</loc><lastmod>2026-07-02</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://crea8ivmedia.com/patientflow/use-cases.html</loc><lastmod>2026-07-02</lastmod><changefreq>monthly</changefreq><priority>0.75</priority></url>
-  <url><loc>https://crea8ivmedia.com/patientflow/security.html</loc><lastmod>2026-07-02</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/live-demo.html</loc><lastmod>2026-09-13</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/ai-showcase.html</loc><lastmod>2026-09-13</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/use-cases.html</loc><lastmod>2026-09-13</lastmod><changefreq>monthly</changefreq><priority>0.75</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/security.html</loc><lastmod>2026-09-13</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://crea8ivmedia.com/patientflow/status.html</loc><lastmod>2026-07-02</lastmod><changefreq>daily</changefreq><priority>0.4</priority></url>
   <url><loc>https://crea8ivmedia.com/patientflow/roadmap.html</loc><lastmod>2026-07-02</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://crea8ivmedia.com/patientflow/whats-new.html</loc><lastmod>2026-07-02</lastmod><changefreq>weekly</changefreq><priority>0.7</priority></url>
@@ -16,4 +16,7 @@
   <url><loc>https://crea8ivmedia.com/patientflow/demo.html</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>
   <url><loc>https://crea8ivmedia.com/patientflow/contact.html</loc><lastmod>2026-06-22</lastmod><changefreq>yearly</changefreq><priority>0.5</priority></url>
   <url><loc>https://crea8ivmedia.com/patientflow/register.html</loc><lastmod>2026-06-22</lastmod><changefreq>yearly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/llms.txt</loc><lastmod>2026-09-13</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/pricing.md</loc><lastmod>2026-09-13</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://crea8ivmedia.com/patientflow/facts.json</loc><lastmod>2026-09-13</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>

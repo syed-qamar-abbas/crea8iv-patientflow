@@ -18,6 +18,13 @@ const roleColors = {
 };
 
 const money = (value = 0) => `PKR ${Number(value || 0).toLocaleString()}`;
+const compactMoney = (value = 0) => {
+  const amount = Number(value || 0);
+  if (amount <= 0) return '—';
+  if (amount >= 1000000) return `PKR ${(amount / 1000000).toFixed(1)}M`;
+  if (amount >= 1000) return `PKR ${(amount / 1000).toFixed(amount >= 100000 ? 0 : 1)}K`;
+  return money(amount);
+};
 const makeInitials = (name = '') => name.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'ST';
 
 const buildCredentialMessage = (staff, clinicInfo) => {
@@ -168,7 +175,7 @@ function StaffDetailModal({ staff, onClose }) {
           {[
             { label: 'This Month', value: monthAppointments, sub: appointmentsLabel.toLowerCase(), color: 'text-indigo-600' },
             { label: 'All Time', value: allAppointments, sub: 'total handled', color: 'text-gray-900 dark:text-white' },
-            { label: 'Revenue', value: `PKR ${(staffRevenue / 1000000).toFixed(1)}M`, sub: 'generated', color: 'text-emerald-600' },
+            { label: 'Revenue', value: compactMoney(staffRevenue), sub: 'generated', color: 'text-emerald-600' },
           ].map(s => (
             <div key={s.label} className="bg-gray-50 dark:bg-white/5 rounded-xl p-3 text-center">
               <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
@@ -581,7 +588,7 @@ export default function Staff() {
               </div>
               <div className="text-center">
                 <p className="text-sm font-bold text-emerald-600">
-                  {staff.revenue > 0 ? `${(staff.revenue / 1000000).toFixed(1)}M` : '—'}
+                  {compactMoney(staff.revenue)}
                 </p>
                 <p className="text-[10px] text-gray-400">Revenue</p>
               </div>

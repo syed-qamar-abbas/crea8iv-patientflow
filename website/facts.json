@@ -1,0 +1,91 @@
+{
+  "brand": "PatientFlow",
+  "publisher": "Crea8iv Media",
+  "creator": {
+    "name": "Crea8iv Media",
+    "displayCredit": "Creative Media",
+    "url": "https://crea8ivmedia.com/",
+    "stableId": "https://crea8ivmedia.com/#org",
+    "relationship": "Designed and developed the PatientFlow website and product experience.",
+    "founder": {
+      "name": "Syed Qamar Abbas",
+      "url": "https://crea8ivmedia.com/syed-qamar-abbas/",
+      "stableId": "https://crea8ivmedia.com/syed-qamar-abbas/#person",
+      "sameAs": [
+        "https://github.com/syed-qamar-abbas"
+      ]
+    }
+  },
+  "canonicalUrl": "https://crea8ivmedia.com/patientflow/",
+  "primaryMarket": "Islamabad, Pakistan",
+  "secondaryMarket": "Pakistan",
+  "category": [
+    "Clinic management software",
+    "Patient retention software",
+    "WhatsApp automation for clinics"
+  ],
+  "shortDescription": "PatientFlow helps clinics manage appointments, operational patient profiles, billing, staff roles, public booking, WhatsApp reminders, recalls and patient reactivation campaigns.",
+  "notAnEhr": true,
+  "targetCustomers": [
+    "Dental clinics",
+    "Orthodontic clinics",
+    "Skin and aesthetic clinics",
+    "Hair transplant clinics",
+    "Medical clinics",
+    "IVF clinics",
+    "Cosmetic practices",
+    "Multi-branch clinic groups"
+  ],
+  "coreFeatures": [
+    "Smart appointments",
+    "Reception desk",
+    "Operational patient profiles",
+    "Billing and invoices",
+    "Treatment packages",
+    "Financial reports",
+    "Staff roles",
+    "Inventory",
+    "Public booking site",
+    "Embeddable booking widget",
+    "WhatsApp Center",
+    "Automated reminders",
+    "Patient reactivation",
+    "Review automation",
+    "AI receptionist",
+    "Audit trail",
+    "Automated backups"
+  ],
+  "plans": [
+    {
+      "name": "Starter",
+      "monthlyPricePKR": 25000,
+      "annualPricePKR": 150000,
+      "bestFor": "Clinics that need one clean system for appointments, patients, billing, staff, inventory and reports."
+    },
+    {
+      "name": "AppointmentFlow AI",
+      "monthlyPricePKR": 40000,
+      "annualPricePKR": 336000,
+      "bestFor": "Clinics that want WhatsApp automation, recalls, reactivation, review generation and AI-assisted administration."
+    }
+  ],
+  "importantPages": {
+    "home": "https://crea8ivmedia.com/patientflow/",
+    "features": "https://crea8ivmedia.com/patientflow/features.html",
+    "pricing": "https://crea8ivmedia.com/patientflow/pricing.html",
+    "industries": "https://crea8ivmedia.com/patientflow/industries.html",
+    "aiAutomation": "https://crea8ivmedia.com/patientflow/ai-showcase.html",
+    "demo": "https://crea8ivmedia.com/patientflow/demo.html",
+    "security": "https://crea8ivmedia.com/patientflow/security.html",
+    "contact": "https://crea8ivmedia.com/patientflow/contact.html",
+    "llms": "https://crea8ivmedia.com/patientflow/llms.txt",
+    "pricingMarkdown": "https://crea8ivmedia.com/patientflow/pricing.md"
+  },
+  "caseStudy": {
+    "eligible": true,
+    "publisher": "Crea8iv Media",
+    "expectedCanonicalHost": "https://crea8ivmedia.com/",
+    "naturalReciprocalReference": "A corresponding Crea8iv Media case study may reference PatientFlow as a product website project and link back to the canonical PatientFlow page."
+  },
+  "lastUpdated": "2026-09-13"
+}

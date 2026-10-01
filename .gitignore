@@ -9,6 +9,7 @@ build/
 !**/.env.example
 .DS_Store
 .claude/
+.codex-audit/
 *.zip
 
 # Editor / IDE

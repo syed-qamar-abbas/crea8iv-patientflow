@@ -43,14 +43,14 @@ export default function PatientSearchSelect({
     if (fromList) { setSelected(fromList); return; }
     if (initialLabel) { setSelected({ id: value, name: initialLabel }); return; }
     // Last resort: fetch the single patient by id.
-    fetchApi(`/clients/${value}`).then((c) => c && setSelected(c)).catch(() => {});
+    fetchApi(`/clients/${value}`, { suppressAuthRedirect: true }).then((c) => c && setSelected(c)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, initialLabel]);
 
   const runSearch = useCallback((q) => {
     if (!q || q.trim().length < 1) { setResults([]); setLoading(false); return; }
     setLoading(true);
-    fetchApi(`/clients?search=${encodeURIComponent(q.trim())}&limit=8`)
+    fetchApi(`/clients?search=${encodeURIComponent(q.trim())}&limit=8`, { suppressAuthRedirect: true })
       .then((data) => {
         const list = Array.isArray(data) ? data : (data.clients ?? data.data ?? []);
         setResults(list);

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MailCheck, ArrowLeft } from 'lucide-react';
 import { useClinic } from '../context/ClinicContext';
-import { fetchPublicApi } from '../config/api';
+import { appPath, fetchPublicApi } from '../config/api';
 import ClinicLogoMark from '../components/branding/ClinicLogoMark';
 
 export default function ForgotPassword() {
@@ -19,7 +19,10 @@ export default function ForgotPassword() {
     try {
       await fetchPublicApi('/auth/forgot-password', {
         method: 'POST',
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          resetBaseUrl: new URL(appPath('/reset-password'), window.location.origin).toString(),
+        }),
       });
       setSent(true);
     } catch (err) {

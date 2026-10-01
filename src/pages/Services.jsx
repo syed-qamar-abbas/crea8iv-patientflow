@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Stethoscope, Plus, Clock, Pencil, Trash2, Star, Save, Loader2 } from 'lucide-react';
-import { fetchApi } from '../config/api';
+import { fetchApi, peekApiCacheByPrefix } from '../config/api';
 import { useClinic } from '../context/ClinicContext';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
@@ -13,6 +13,10 @@ const categoryColors = {
 };
 
 const emptyForm = { name: '', category: '', price: '', defaultProcedureCost: '', duration: '', description: '', popular: false };
+const normalizeServices = (payload) => (
+  Array.isArray(payload) ? payload : (payload?.services ?? payload?.data ?? [])
+);
+const cachedServices = () => normalizeServices(peekApiCacheByPrefix('/services'));
 
 function ServiceFormModal({ isOpen, onClose, onSave, target, saving }) {
   const { term } = useClinic();
@@ -194,8 +198,8 @@ export default function Services() {
   const serviceLabel = term('service', 'Service');
   const servicesLabel = term('services', 'Services');
   const treatmentLabel = term('treatment', 'Treatment');
-  const [services, setServices] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [services, setServices] = useState(() => cachedServices());
+  const [loading, setLoading] = useState(() => cachedServices().length === 0);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -203,10 +207,11 @@ export default function Services() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
-  const loadServices = async () => {
+  const loadServices = async ({ background = false } = {}) => {
+    if (!background) setLoading(true);
     try {
       const data = await fetchApi('/services');
-      setServices(Array.isArray(data) ? data : (data.services ?? data.data ?? []));
+      setServices(normalizeServices(data));
     } catch (err) {
       console.error('Failed to fetch services:', err);
     } finally {
@@ -214,7 +219,7 @@ export default function Services() {
     }
   };
 
-  useEffect(() => { loadServices(); }, []);
+  useEffect(() => { loadServices({ background: services.length > 0 }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const handleSave = async (formData) => {
     setSaving(true);

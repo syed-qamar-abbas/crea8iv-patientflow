@@ -12,7 +12,13 @@ User-agent: PerplexityBot
 Allow: /
 User-agent: ClaudeBot
 Allow: /
+User-agent: anthropic-ai
+Allow: /
 User-agent: Google-Extended
+Allow: /
+User-agent: Bingbot
+Allow: /
+User-agent: Applebot
 Allow: /
 
 Sitemap: https://crea8ivmedia.com/patientflow/sitemap.xml

@@ -15,11 +15,17 @@ export const REQUIRED_CLINIC_FIELDS = [
   { key: 'iban', label: 'IBAN', group: 'Payment / Account Details' },
 ];
 
+const PAYMENT_FIELD_KEYS = new Set(['bankName', 'accountTitle', 'accountNumber', 'iban']);
+
 export function isFilled(value) {
   return String(value ?? '').trim() !== '';
 }
 
 // Returns the list of required fields still missing from a clinic object.
-export function missingClinicFields(clinic = {}) {
-  return REQUIRED_CLINIC_FIELDS.filter((f) => !isFilled(clinic[f.key]));
+export function missingClinicFields(clinic = {}, options = {}) {
+  const { includePaymentFields = true } = options;
+  return REQUIRED_CLINIC_FIELDS.filter((f) => {
+    if (!includePaymentFields && PAYMENT_FIELD_KEYS.has(f.key)) return false;
+    return !isFilled(clinic[f.key]);
+  });
 }

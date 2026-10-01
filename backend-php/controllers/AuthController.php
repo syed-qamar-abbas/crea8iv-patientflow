@@ -100,6 +100,31 @@ class AuthController {
         $db->prepare("DELETE FROM RefreshToken WHERE userId = ?")->execute([$userId]);
     }
 
+    private function passwordResetBaseUrl($input) {
+        $requested = trim((string)($input['resetBaseUrl'] ?? ''));
+        if ($requested !== '') {
+            $parts = parse_url($requested);
+            $scheme = strtolower($parts['scheme'] ?? '');
+            $host = strtolower($parts['host'] ?? '');
+            $path = $parts['path'] ?? '';
+            $isPlatformHost = $host === 'crea8ivmedia.com'
+                || str_ends_with($host, '.crea8ivmedia.com')
+                || $host === 'crea8ivpatientflow.com'
+                || str_ends_with($host, '.crea8ivpatientflow.com');
+            $isLocalDev = APP_ENV === 'development'
+                && in_array($host, ['localhost', '127.0.0.1'], true);
+
+            if (($scheme === 'https' || ($isLocalDev && $scheme === 'http'))
+                && ($isPlatformHost || $isLocalDev)
+                && preg_match('#/reset-password/?$#', $path)) {
+                $port = isset($parts['port']) ? ':' . (int)$parts['port'] : '';
+                return $scheme . '://' . $host . $port . rtrim($path, '/');
+            }
+        }
+
+        return rtrim(CLIENT_URL, '/') . '/reset-password';
+    }
+
     // ---------------------------------------------------------------
     // Endpoints
     // ---------------------------------------------------------------
@@ -250,11 +275,11 @@ class AuthController {
         $storedToken = $stmt->fetch();
 
         if (!$storedToken || strtotime($storedToken['expiresAt']) < time()) {
-            // Token reuse or theft signal: a validly-signed refresh token that is
-            // not in the store means it was already rotated. Revoke everything.
-            if (!$storedToken && !empty($payload['id'])) {
-                $this->revokeAllUserTokens($db, $payload['id']);
-                error_log('Refresh token reuse detected for user ' . $payload['id'] . ' — all sessions revoked');
+            // A second browser tab can submit the old token just after another
+            // tab rotates it. Reject only this stale token; revoking every token
+            // here logs the user out across all tabs and devices.
+            if ($storedToken) {
+                $db->prepare("DELETE FROM RefreshToken WHERE id = ?")->execute([$storedToken['id']]);
             }
             send_error('Refresh token expired or invalid', 401);
         }
@@ -306,7 +331,7 @@ class AuthController {
             $stmt = $db->prepare("INSERT INTO PasswordReset (id, userId, tokenHash, expiresAt) VALUES (?, ?, ?, ?)");
             $stmt->execute([generate_uuid(), $dbUser['id'], $tokenHash, $expiresAt]);
 
-            $resetUrl = rtrim(CLIENT_URL, '/') . '/reset-password?token=' . $rawToken;
+            $resetUrl = $this->passwordResetBaseUrl($input) . '?token=' . $rawToken;
             $ttlMinutes = (int)(PASSWORD_RESET_TTL / 60);
             send_app_email(
                 $dbUser['email'],

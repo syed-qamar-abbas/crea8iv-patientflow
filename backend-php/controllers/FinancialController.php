@@ -70,16 +70,32 @@ class FinancialController {
 
     public function getMonthly($input, $user) {
         $db = $this->ensure($user);
-        
+
+        $rawFrom = $_GET['from'] ?? '';
+        $rawTo = $_GET['to'] ?? '';
+        if (($rawFrom !== '' || $rawTo !== '') && (!pf_valid_date($rawFrom) || !pf_valid_date($rawTo) || $rawFrom > $rawTo)) {
+            send_error('Invalid financial date range', 400);
+        }
+        $from = $rawFrom !== '' ? $rawFrom . ' 00:00:00' : null;
+        $to = $rawTo !== '' ? $rawTo . ' 23:59:59' : null;
+
+        $paymentWhere = "p.clinicId = ? AND p.amount != 0";
+        $paymentParams = [$user['clinicId']];
+        if ($from && $to) {
+            $paymentWhere .= " AND p.paidAt >= ? AND p.paidAt <= ?";
+            $paymentParams[] = $from;
+            $paymentParams[] = $to;
+        }
+
         $stmt = $db->prepare("
             SELECT p.amount, p.paidAt, a.specialty
             FROM InvoicePaymentEntry p
             JOIN Invoice i ON i.id = p.invoiceId AND i.clinicId = p.clinicId
             LEFT JOIN Appointment a ON i.appointmentId = a.id AND a.clinicId = i.clinicId
-            WHERE p.clinicId = ? AND p.amount != 0
+            WHERE $paymentWhere
             ORDER BY p.paidAt ASC
         ");
-        $stmt->execute([$user['clinicId']]);
+        $stmt->execute($paymentParams);
         $invoices = $stmt->fetchAll();
 
         $monthly = [];
@@ -113,8 +129,16 @@ class FinancialController {
             $monthly[$monthKey]['total'] += $amount;
         }
 
-        $stmtExpense = $db->prepare("SELECT amount, expenseDate FROM Expense WHERE clinicId = ? AND archivedAt IS NULL");
-        $stmtExpense->execute([$user['clinicId']]);
+        $expenseWhere = "clinicId = ? AND archivedAt IS NULL";
+        $expenseParams = [$user['clinicId']];
+        if ($from && $to) {
+            $expenseWhere .= " AND expenseDate >= ? AND expenseDate <= ?";
+            $expenseParams[] = substr($from, 0, 10);
+            $expenseParams[] = substr($to, 0, 10);
+        }
+
+        $stmtExpense = $db->prepare("SELECT amount, expenseDate FROM Expense WHERE $expenseWhere");
+        $stmtExpense->execute($expenseParams);
         foreach ($stmtExpense->fetchAll() as $row) {
             $date = strtotime($row['expenseDate']);
             $monthKey = date('Y-m', $date);
@@ -128,11 +152,19 @@ class FinancialController {
             $monthly[$monthKey]['generalExpenses'] += floatval($row['amount']);
         }
 
+        $costWhere = "pc.clinicId = ? AND i.status NOT IN ('refunded', 'cancelled')";
+        $costParams = [$user['clinicId']];
+        if ($from && $to) {
+            $costWhere .= " AND i.createdAt >= ? AND i.createdAt <= ?";
+            $costParams[] = $from;
+            $costParams[] = $to;
+        }
+
         $stmtCosts = $db->prepare("SELECT pc.procedureCost, i.createdAt
             FROM InvoiceProcedureCost pc
             JOIN Invoice i ON i.id = pc.invoiceId AND i.clinicId = pc.clinicId
-            WHERE pc.clinicId = ? AND i.status NOT IN ('refunded', 'cancelled')");
-        $stmtCosts->execute([$user['clinicId']]);
+            WHERE $costWhere");
+        $stmtCosts->execute($costParams);
         foreach ($stmtCosts->fetchAll() as $row) {
             $date = strtotime($row['createdAt']);
             $monthKey = date('Y-m', $date);

@@ -19,7 +19,7 @@ export default function SetupAlert() {
   useEffect(() => {
     if (!['owner', 'manager'].includes(role)) return;
     fetchApi('/settings/public-site')
-      .then(({ clinic }) => setMissing(missingClinicFields(clinic || {})))
+      .then(({ clinic }) => setMissing(missingClinicFields(clinic || {}, { includePaymentFields: false })))
       .catch(() => {});
   }, [role]);
 

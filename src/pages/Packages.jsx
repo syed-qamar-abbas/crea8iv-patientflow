@@ -1,23 +1,34 @@
 import { useEffect, useState } from 'react';
 import { Edit2, Loader2, Package, Plus, Trash2 } from 'lucide-react';
-import { fetchApi } from '../config/api';
+import { fetchApi, peekApiCacheByPrefix } from '../config/api';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 
 const emptyForm = { name: '', description: '', totalPrice: 0, validity: 30, specialty: 'dental' };
 const money = (value = 0) => `PKR ${Number(value || 0).toLocaleString()}`;
+const normalizePackages = (payload) => (
+  Array.isArray(payload) ? payload : (payload?.packages ?? payload?.data ?? [])
+);
+const cachedPackages = () => normalizePackages(peekApiCacheByPrefix('/packages'));
 
 export default function Packages() {
-  const [packages, setPackages] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [packages, setPackages] = useState(() => cachedPackages());
+  const [loading, setLoading] = useState(() => cachedPackages().length === 0);
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
 
-  const load = async () => { setLoading(true); try { setPackages(await fetchApi('/packages')); } finally { setLoading(false); } };
-  useEffect(() => { load(); }, []);
+  const load = async ({ background = false } = {}) => {
+    if (!background) setLoading(true);
+    try {
+      setPackages(normalizePackages(await fetchApi('/packages')));
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load({ background: packages.length > 0 }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
   useEffect(() => { setForm(editTarget ? { ...emptyForm, ...editTarget } : emptyForm); }, [editTarget, showForm]);
 
   const save = async () => {

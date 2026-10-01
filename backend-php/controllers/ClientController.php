@@ -39,6 +39,16 @@ class ClientController {
         $status = $_GET['status'] ?? '';
         $tier = $_GET['tier'] ?? '';
         $duesOnly = ($_GET['duesOnly'] ?? '') === 'true';
+        $sort = $_GET['sort'] ?? ($duesOnly ? 'dues_desc' : 'date_desc');
+        $sortMap = [
+            'date_desc' => 'createdAt DESC',
+            'date_asc' => 'createdAt ASC',
+            'name_asc' => 'name ASC, createdAt DESC',
+            'name_desc' => 'name DESC, createdAt DESC',
+            'earning_desc' => 'totalSpent DESC, createdAt DESC',
+            'earning_asc' => 'totalSpent ASC, createdAt DESC',
+            'dues_desc' => 'outstandingBalance DESC, createdAt DESC',
+        ];
         $page = max(1, isset($_GET['page']) ? intval($_GET['page']) : 1);
         $limit = min(100, max(1, isset($_GET['limit']) ? intval($_GET['limit']) : 50));
         $offset = ($page - 1) * $limit;
@@ -101,7 +111,7 @@ class ClientController {
         }
 
         // Get clients
-        $orderBy = $duesOnly ? 'outstandingBalance DESC, createdAt DESC' : 'createdAt DESC';
+        $orderBy = $sortMap[$sort] ?? $sortMap[$duesOnly ? 'dues_desc' : 'date_desc'];
         $stmt = $db->prepare("SELECT * FROM Client WHERE $whereSql ORDER BY $orderBy LIMIT $limit OFFSET $offset");
         $stmt->execute($params);
         $clients = $stmt->fetchAll();

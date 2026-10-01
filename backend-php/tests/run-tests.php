@@ -143,6 +143,12 @@ check('username availability sees existing usernames', !pf_username_available($u
 check('username availability supports self-exclusion', pf_username_available($usernameDb, 'user-11111111', '11111111-aaaa-bbbb-cccc-111111111111'));
 
 // ---------------------------------------------------------------------------
+echo "== auth session integration ==\n";
+$authCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/auth-session-tests.php');
+passthru($authCommand, $authStatus);
+check('focused auth session suite passes', $authStatus === 0);
+
+// ---------------------------------------------------------------------------
 echo "== secure check-in integration ==\n";
 $focusedCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/checkin-token-tests.php');
 passthru($focusedCommand, $focusedStatus);

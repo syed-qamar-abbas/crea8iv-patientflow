@@ -1,56 +1,52 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { ClinicProvider } from './context/ClinicContext';
 import { PORTAL_BASENAME } from './config/portalPath';
-import LayoutNew from './components/layout/LayoutNew';
-
-// Existing pages
-import Login from './pages/Login';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import SubscriptionInactive from './pages/SubscriptionInactive';
-
-// Platform owner portal
-import AdminLayout from './pages/admin/AdminLayout';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminLeads from './pages/admin/AdminLeads';
-import AdminTenants from './pages/admin/AdminTenants';
-import AdminPayments from './pages/admin/AdminPayments';
-import AdminSupport from './pages/admin/AdminSupport';
-import AdminPlatform from './pages/admin/AdminPlatform';
-import PublicSite from './pages/PublicSite';
-import Dashboard from './pages/Dashboard';
-import ReceptionDesk from './pages/ReceptionDesk';
-import Appointments from './pages/Appointments';
-import Clients from './pages/Clients';
-import ClientProfile from './pages/ClientProfile';
-import ClinicalWorkspace from './pages/ClinicalWorkspace';
-import Lab from './pages/Lab';
-import Staff from './pages/Staff';
-import Services from './pages/Services';
-import Financials from './pages/Financials';
-import Settings from './pages/Settings';
-
-// New pages
-import Packages from './pages/Packages';
-import Invoices from './pages/Invoices';
-import Prescriptions from './pages/Prescriptions';
-import Inventory from './pages/Inventory';
-import Gallery from './pages/Gallery';
-import Feedback from './pages/Feedback';
-import Marketing from './pages/Marketing';
-import ManualOutreach from './pages/ManualOutreach';
-import WhatsAppCenter from './pages/WhatsAppCenter';
-import Reports from './pages/Reports';
-import AuditTrail from './pages/AuditTrail';
-import MultiBranch from './pages/MultiBranch';
-import AIHub from './pages/AIHub';
-import AIReceptionist from './pages/AIReceptionist';
-import MetaLeadCenter from './pages/MetaLeadCenter';
-import ImportCenter from './pages/ImportCenter';
-import Support from './pages/Support';
 import { canAccessPath } from './config/roles';
 import { useClinic } from './context/ClinicContext';
+
+const LayoutNew = lazy(() => import('./components/layout/LayoutNew'));
+const Login = lazy(() => import('./pages/Login'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const SubscriptionInactive = lazy(() => import('./pages/SubscriptionInactive'));
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const AdminLeads = lazy(() => import('./pages/admin/AdminLeads'));
+const AdminTenants = lazy(() => import('./pages/admin/AdminTenants'));
+const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
+const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
+const AdminPlatform = lazy(() => import('./pages/admin/AdminPlatform'));
+const PublicSite = lazy(() => import('./pages/PublicSite'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const ReceptionDesk = lazy(() => import('./pages/ReceptionDesk'));
+const Appointments = lazy(() => import('./pages/Appointments'));
+const Clients = lazy(() => import('./pages/Clients'));
+const ClientProfile = lazy(() => import('./pages/ClientProfile'));
+const ClinicalWorkspace = lazy(() => import('./pages/ClinicalWorkspace'));
+const Lab = lazy(() => import('./pages/Lab'));
+const Staff = lazy(() => import('./pages/Staff'));
+const Services = lazy(() => import('./pages/Services'));
+const Financials = lazy(() => import('./pages/Financials'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Packages = lazy(() => import('./pages/Packages'));
+const Invoices = lazy(() => import('./pages/Invoices'));
+const Prescriptions = lazy(() => import('./pages/Prescriptions'));
+const Inventory = lazy(() => import('./pages/Inventory'));
+const Gallery = lazy(() => import('./pages/Gallery'));
+const Feedback = lazy(() => import('./pages/Feedback'));
+const Marketing = lazy(() => import('./pages/Marketing'));
+const ManualOutreach = lazy(() => import('./pages/ManualOutreach'));
+const WhatsAppCenter = lazy(() => import('./pages/WhatsAppCenter'));
+const Reports = lazy(() => import('./pages/Reports'));
+const AuditTrail = lazy(() => import('./pages/AuditTrail'));
+const MultiBranch = lazy(() => import('./pages/MultiBranch'));
+const AIHub = lazy(() => import('./pages/AIHub'));
+const AIReceptionist = lazy(() => import('./pages/AIReceptionist'));
+const MetaLeadCenter = lazy(() => import('./pages/MetaLeadCenter'));
+const ImportCenter = lazy(() => import('./pages/ImportCenter'));
+const Support = lazy(() => import('./pages/Support'));
 
 const FEATURE_ROUTES = {
   marketing: { key: 'marketingEnabled', label: 'Marketing' },
@@ -125,76 +121,98 @@ function FeatureRoute({ path, children }) {
   return children;
 }
 
+function RouteFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 text-sm font-semibold text-slate-400 dark:bg-slate-950 dark:text-slate-500">
+      Loading…
+    </div>
+  );
+}
+
+function InlineRouteFallback() {
+  return (
+    <div className="flex min-h-[45vh] items-center justify-center p-6 text-sm font-semibold text-slate-400 dark:text-slate-500">
+      Loading…
+    </div>
+  );
+}
+
+function PageSuspense({ children }) {
+  return <Suspense fallback={<InlineRouteFallback />}>{children}</Suspense>;
+}
+
 export default function AppNew() {
   return (
     <ThemeProvider>
       <ClinicProvider>
         <BrowserRouter basename={PORTAL_BASENAME}>
-          <Routes>
-            <Route path="/public" element={<PublicSite />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/subscription-inactive" element={<SubscriptionInactive />} />
-            <Route
-              path="/admin"
-              element={
-                <SuperadminRoute>
-                  <AdminLayout />
-                </SuperadminRoute>
-              }
-            >
-              <Route index element={<AdminDashboard />} />
-              <Route path="leads" element={<AdminLeads />} />
-              <Route path="tenants" element={<AdminTenants />} />
-              <Route path="payments" element={<AdminPayments />} />
-              <Route path="support" element={<AdminSupport />} />
-              <Route path="platform" element={<AdminPlatform />} />
-            </Route>
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <LayoutNew />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<Navigate to="/dashboard" replace />} />
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/public" element={<PublicSite />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/subscription-inactive" element={<SubscriptionInactive />} />
+              <Route
+                path="/admin"
+                element={
+                  <SuperadminRoute>
+                    <AdminLayout />
+                  </SuperadminRoute>
+                }
+              >
+                <Route index element={<AdminDashboard />} />
+                <Route path="leads" element={<AdminLeads />} />
+                <Route path="tenants" element={<AdminTenants />} />
+                <Route path="payments" element={<AdminPayments />} />
+                <Route path="support" element={<AdminSupport />} />
+                <Route path="platform" element={<AdminPlatform />} />
+              </Route>
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <LayoutNew />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="/dashboard" replace />} />
 
-              {/* Existing routes */}
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="reception" element={<RoleRoute path="reception"><ReceptionDesk /></RoleRoute>} />
-              <Route path="appointments" element={<RoleRoute path="appointments"><Appointments /></RoleRoute>} />
-              <Route path="clients" element={<RoleRoute path="clients"><Clients /></RoleRoute>} />
-              <Route path="clients/:id" element={<RoleRoute path="clients"><ClientProfile /></RoleRoute>} />
-              <Route path="clinical" element={<RoleRoute path="clinical"><ClinicalWorkspace /></RoleRoute>} />
-              <Route path="lab" element={<RoleRoute path="lab"><Lab /></RoleRoute>} />
-              <Route path="staff" element={<RoleRoute path="staff"><Staff /></RoleRoute>} />
-              <Route path="services" element={<RoleRoute path="services"><Services /></RoleRoute>} />
-              <Route path="financials" element={<RoleRoute path="financials"><Financials /></RoleRoute>} />
-              <Route path="settings" element={<RoleRoute path="settings"><Settings /></RoleRoute>} />
+                {/* Existing routes */}
+                <Route path="dashboard" element={<PageSuspense><Dashboard /></PageSuspense>} />
+                <Route path="reception" element={<RoleRoute path="reception"><PageSuspense><ReceptionDesk /></PageSuspense></RoleRoute>} />
+                <Route path="appointments" element={<RoleRoute path="appointments"><PageSuspense><Appointments /></PageSuspense></RoleRoute>} />
+                <Route path="clients" element={<RoleRoute path="clients"><PageSuspense><Clients /></PageSuspense></RoleRoute>} />
+                <Route path="clients/:id" element={<RoleRoute path="clients"><PageSuspense><ClientProfile /></PageSuspense></RoleRoute>} />
+                <Route path="clinical" element={<RoleRoute path="clinical"><PageSuspense><ClinicalWorkspace /></PageSuspense></RoleRoute>} />
+                <Route path="lab" element={<RoleRoute path="lab"><PageSuspense><Lab /></PageSuspense></RoleRoute>} />
+                <Route path="staff" element={<RoleRoute path="staff"><PageSuspense><Staff /></PageSuspense></RoleRoute>} />
+                <Route path="services" element={<RoleRoute path="services"><PageSuspense><Services /></PageSuspense></RoleRoute>} />
+                <Route path="financials" element={<RoleRoute path="financials"><PageSuspense><Financials /></PageSuspense></RoleRoute>} />
+                <Route path="settings" element={<RoleRoute path="settings"><PageSuspense><Settings /></PageSuspense></RoleRoute>} />
 
-              {/* New routes */}
-              <Route path="packages" element={<RoleRoute path="packages"><Packages /></RoleRoute>} />
-              <Route path="invoices" element={<RoleRoute path="invoices"><Invoices /></RoleRoute>} />
-              <Route path="prescriptions" element={<RoleRoute path="prescriptions"><Prescriptions /></RoleRoute>} />
-              <Route path="inventory" element={<RoleRoute path="inventory"><Inventory /></RoleRoute>} />
-              <Route path="gallery" element={<RoleRoute path="gallery"><Gallery /></RoleRoute>} />
-              <Route path="feedback" element={<RoleRoute path="feedback"><Feedback /></RoleRoute>} />
-              <Route path="marketing" element={<FeatureRoute path="marketing"><Marketing /></FeatureRoute>} />
-              <Route path="outreach" element={<RoleRoute path="outreach"><ManualOutreach /></RoleRoute>} />
-              <Route path="whatsapp" element={<FeatureRoute path="whatsapp"><WhatsAppCenter /></FeatureRoute>} />
-              <Route path="reports" element={<RoleRoute path="reports"><Reports /></RoleRoute>} />
-              <Route path="audit" element={<RoleRoute path="audit"><AuditTrail /></RoleRoute>} />
-              <Route path="branches" element={<RoleRoute path="branches"><MultiBranch /></RoleRoute>} />
-              <Route path="ai" element={<FeatureRoute path="ai"><AIHub /></FeatureRoute>} />
-              <Route path="ai-receptionist" element={<FeatureRoute path="ai-receptionist"><AIReceptionist /></FeatureRoute>} />
-              <Route path="meta-leads" element={<FeatureRoute path="meta-leads"><MetaLeadCenter /></FeatureRoute>} />
-              <Route path="imports" element={<FeatureRoute path="imports"><ImportCenter /></FeatureRoute>} />
-              <Route path="support" element={<RoleRoute path="support"><Support /></RoleRoute>} />
-            </Route>
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+                {/* New routes */}
+                <Route path="packages" element={<RoleRoute path="packages"><PageSuspense><Packages /></PageSuspense></RoleRoute>} />
+                <Route path="invoices" element={<RoleRoute path="invoices"><PageSuspense><Invoices /></PageSuspense></RoleRoute>} />
+                <Route path="prescriptions" element={<RoleRoute path="prescriptions"><PageSuspense><Prescriptions /></PageSuspense></RoleRoute>} />
+                <Route path="inventory" element={<RoleRoute path="inventory"><PageSuspense><Inventory /></PageSuspense></RoleRoute>} />
+                <Route path="gallery" element={<RoleRoute path="gallery"><PageSuspense><Gallery /></PageSuspense></RoleRoute>} />
+                <Route path="feedback" element={<RoleRoute path="feedback"><PageSuspense><Feedback /></PageSuspense></RoleRoute>} />
+                <Route path="marketing" element={<FeatureRoute path="marketing"><PageSuspense><Marketing /></PageSuspense></FeatureRoute>} />
+                <Route path="outreach" element={<RoleRoute path="outreach"><PageSuspense><ManualOutreach /></PageSuspense></RoleRoute>} />
+                <Route path="whatsapp" element={<FeatureRoute path="whatsapp"><PageSuspense><WhatsAppCenter /></PageSuspense></FeatureRoute>} />
+                <Route path="reports" element={<RoleRoute path="reports"><PageSuspense><Reports /></PageSuspense></RoleRoute>} />
+                <Route path="audit" element={<RoleRoute path="audit"><PageSuspense><AuditTrail /></PageSuspense></RoleRoute>} />
+                <Route path="branches" element={<RoleRoute path="branches"><PageSuspense><MultiBranch /></PageSuspense></RoleRoute>} />
+                <Route path="ai" element={<FeatureRoute path="ai"><PageSuspense><AIHub /></PageSuspense></FeatureRoute>} />
+                <Route path="ai-receptionist" element={<FeatureRoute path="ai-receptionist"><PageSuspense><AIReceptionist /></PageSuspense></FeatureRoute>} />
+                <Route path="meta-leads" element={<FeatureRoute path="meta-leads"><PageSuspense><MetaLeadCenter /></PageSuspense></FeatureRoute>} />
+                <Route path="imports" element={<FeatureRoute path="imports"><PageSuspense><ImportCenter /></PageSuspense></FeatureRoute>} />
+                <Route path="support" element={<RoleRoute path="support"><PageSuspense><Support /></PageSuspense></RoleRoute>} />
+              </Route>
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </ClinicProvider>
     </ThemeProvider>

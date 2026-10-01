@@ -5,12 +5,14 @@
   "main": "backend/src/hostingerWebAppServer.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build --base=/",
     "build:node-clinic": "vite build --base=/clinic/ --outDir=dist-node-clinic --emptyOutDir",
     "build:node-root": "vite build --base=/ --outDir=dist-node-root --emptyOutDir",
     "start": "node backend/src/hostingerWebAppServer.js",
     "start:node-webapp": "node backend/src/hostingerWebAppServer.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "smoke:patientflow": "node scripts/patientflow-smoke.mjs",
+    "smoke:patientflow:public": "PF_SMOKE_PUBLIC_ONLY=true node scripts/patientflow-smoke.mjs"
   },
   "engines": {
     "node": "20.x"

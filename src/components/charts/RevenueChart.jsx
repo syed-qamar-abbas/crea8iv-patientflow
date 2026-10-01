@@ -4,14 +4,15 @@ import { fetchApi } from '../../config/api';
 
 const formatPKR = (value) => `PKR ${(Number(value || 0) / 1000).toFixed(0)}k`;
 
-export default function RevenueChart() {
+export default function RevenueChart({ from, to }) {
   const [data, setData] = useState([]);
 
   useEffect(() => {
-    fetchApi('/financials/monthly')
+    const query = from && to ? `?from=${from}&to=${to}` : '';
+    fetchApi(`/financials/monthly${query}`)
       .then(rows => setData(Array.isArray(rows) ? rows.slice(-6) : []))
       .catch(() => setData([]));
-  }, []);
+  }, [from, to]);
 
   const chartData = data.length ? data : [{ month: 'No revenue', total: 0 }];
 

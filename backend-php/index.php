@@ -29,6 +29,8 @@ function cors_origin_allowed($origin) {
     $allowed = array_filter([
         CLIENT_URL,
         getenv('WEBSITE_URL') ?: '',
+        'https://portal.thesmilexperts.com',
+        'https://portal.smileexperts.com',
         'http://localhost:5173',
         'http://localhost:8080',
     ]);
@@ -299,6 +301,10 @@ $routes = [
     ['GET', '^api/v1/support/tickets/([^/]+)$', 'SupportController', 'thread', true],
     ['POST', '^api/v1/support/tickets/([^/]+)/reply$', 'SupportController', 'reply', true],
 
+    // Dashboard summary endpoint. Keeps the initial dashboard load to one compact
+    // request while preserving the existing list endpoints for full module pages.
+    ['GET', '^api/v1/dashboard/summary$', 'DashboardController', 'summary', true],
+
     // Dynamic Settings and Public Website Routes
     ['GET', '^api/v1/settings/public-site$', 'PublicSiteController', 'getSettings', ['owner', 'manager']],
     ['PUT', '^api/v1/settings/public-site$', 'PublicSiteController', 'updateSettings', ['owner', 'manager']],
@@ -422,6 +428,11 @@ $routes = [
     ['POST', '^api/v1/expenses/categories$', 'ExpenseController', 'createCategory', ['owner', 'manager', 'accountant']],
     ['PUT', '^api/v1/expenses/categories/([^/]+)$', 'ExpenseController', 'updateCategory', ['owner', 'manager', 'accountant']],
     ['DELETE', '^api/v1/expenses/categories/([^/]+)$', 'ExpenseController', 'removeCategory', ['owner', 'manager', 'accountant']],
+    ['GET', '^api/v1/expenses/recurring$', 'ExpenseController', 'listRecurring', ['owner', 'manager', 'accountant']],
+    ['POST', '^api/v1/expenses/recurring$', 'ExpenseController', 'createRecurring', ['owner', 'manager', 'accountant']],
+    ['PUT', '^api/v1/expenses/recurring/([^/]+)$', 'ExpenseController', 'updateRecurring', ['owner', 'manager', 'accountant']],
+    ['DELETE', '^api/v1/expenses/recurring/([^/]+)$', 'ExpenseController', 'removeRecurring', ['owner', 'manager', 'accountant']],
+    ['POST', '^api/v1/expenses/recurring/([^/]+)/post$', 'ExpenseController', 'postRecurring', ['owner', 'manager', 'accountant']],
     ['GET', '^api/v1/expenses$', 'ExpenseController', 'list', ['owner', 'manager', 'accountant']],
     ['POST', '^api/v1/expenses$', 'ExpenseController', 'create', ['owner', 'manager', 'accountant']],
     ['GET', '^api/v1/expenses/([^/]+)$', 'ExpenseController', 'get', ['owner', 'manager', 'accountant']],

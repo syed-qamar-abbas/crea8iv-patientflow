@@ -89,6 +89,10 @@ function suggestUsername(value) {
     .slice(0, 24);
 }
 
+function normalizeUsernameInput(value) {
+  return suggestUsername(value);
+}
+
 function useUsernameAvailability(username, excludeUserId = '') {
   const [state, setState] = useState({ status: 'idle', message: '' });
   useEffect(() => {
@@ -317,8 +321,21 @@ export default function AdminTenants() {
   const [actionTenant, setActionTenant] = useState(null);
   const [actionType, setActionType] = useState('');
   const [actionForm, setActionForm] = useState({ billingCycle: 'monthly', reason: 'Subscription unpaid', months: '1' });
+  const [loadingTenants, setLoadingTenants] = useState(true);
 
-  const load = () => fetchApi('/admin/tenants').then(setTenants).catch((e) => setError(e.message));
+  const load = async () => {
+    setLoadingTenants(true);
+    setError('');
+    try {
+      const data = await fetchApi('/admin/tenants', { suppressAuthRedirect: true });
+      setTenants(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setTenants([]);
+      setError(e.message || 'Could not load clinics. Please refresh your session and try again.');
+    } finally {
+      setLoadingTenants(false);
+    }
+  };
   useEffect(() => { load(); }, []);
 
   const counts = useMemo(() => {
@@ -435,7 +452,7 @@ export default function AdminTenants() {
     });
   };
 
-  if (!tenants) {
+  if (loadingTenants && !tenants) {
     return <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading clinics...</div>;
   }
 
@@ -454,7 +471,19 @@ export default function AdminTenants() {
         </button>
       </div>
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
+      {error && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loadingTenants}
+            className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+          >
+            {loadingTenants ? 'Retrying...' : 'Retry'}
+          </button>
+        </div>
+      )}
 
       {/* Search + status filter tabs */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -1228,7 +1257,7 @@ function CreateClinicModal({ onClose, onCreated }) {
             <div><label className={labelCls}>Owner name</label><input className={field} value={f.ownerName} onChange={(e) => setF((p) => ({ ...p, ownerName: e.target.value, ownerUsername: p.ownerUsername || suggestUsername(e.target.value) }))} placeholder="Dr. Name" /></div>
             <div>
               <label className={labelCls}>Owner username *</label>
-              <input className={field} value={f.ownerUsername} onChange={(e) => set('ownerUsername', e.target.value.toLowerCase())} placeholder="dr-smile" autoComplete="username" />
+              <input className={field} value={f.ownerUsername} onChange={(e) => set('ownerUsername', normalizeUsernameInput(e.target.value))} placeholder="dr-smile" autoComplete="username" />
               {ownerUsername.message && (
                 <p className={`mt-1 text-[11px] font-semibold ${ownerUsername.status === 'available' ? 'text-emerald-600' : ownerUsername.status === 'checking' ? 'text-gray-400' : 'text-rose-600'}`}>{ownerUsername.message}</p>
               )}
@@ -1280,19 +1309,66 @@ function CreateClinicModal({ onClose, onCreated }) {
 
 // ----------------------------------------------------------------------
 function EditClinicModal({ tenant, onClose, onSaved }) {
+  const initialOwner = tenant.users?.find((u) => u.role === 'owner') || tenant.users?.[0] || null;
   const [f, setF] = useState({
     name: tenant.name || '', email: tenant.email || '', phone: tenant.phone || '',
     clinicType: tenant.clinicType || 'dental', address: tenant.address || '',
     primaryColor: tenant.primaryColor || '#0f766e', secondaryColor: tenant.secondaryColor || '#14b8a6',
+    ownerName: initialOwner?.name || '',
+    ownerUsername: initialOwner?.username || '',
+    ownerEmail: initialOwner?.email || '',
+    ownerPassword: '',
   });
+  const [ownerId, setOwnerId] = useState(initialOwner?.id || '');
   const [saving, setSaving] = useState(false);
+  const [loadingOwner, setLoadingOwner] = useState(!initialOwner);
   const [err, setErr] = useState('');
+  const ownerUsername = useUsernameAvailability(f.ownerUsername, ownerId);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    if (initialOwner) return undefined;
+    let alive = true;
+    setLoadingOwner(true);
+    fetchApi(`/admin/tenants/${tenant.id}`).then((res) => {
+      if (!alive) return;
+      const owner = res.users?.find((u) => u.role === 'owner') || res.users?.[0] || null;
+      if (owner) {
+        setOwnerId(owner.id || '');
+        setF((p) => ({
+          ...p,
+          ownerName: owner.name || '',
+          ownerUsername: owner.username || '',
+          ownerEmail: owner.email || '',
+        }));
+      }
+    }).catch((e) => {
+      if (alive) setErr(e.message);
+    }).finally(() => {
+      if (alive) setLoadingOwner(false);
+    });
+    return () => { alive = false; };
+  }, [initialOwner, tenant.id]);
 
   const submit = async () => {
     setErr(''); setSaving(true);
     try {
-      await fetchApi(`/admin/tenants/${tenant.id}`, { method: 'PUT', body: JSON.stringify(f) });
+      const body = {
+        name: f.name,
+        email: f.email,
+        phone: f.phone,
+        clinicType: f.clinicType,
+        address: f.address,
+        primaryColor: f.primaryColor,
+        secondaryColor: f.secondaryColor,
+        owner: {
+          name: f.ownerName,
+          username: f.ownerUsername,
+          email: f.ownerEmail,
+          password: f.ownerPassword,
+        },
+      };
+      await fetchApi(`/admin/tenants/${tenant.id}`, { method: 'PUT', body: JSON.stringify(body) });
       onSaved();
     } catch (e) {
       setErr(e.message);
@@ -1316,11 +1392,38 @@ function EditClinicModal({ tenant, onClose, onSaved }) {
           </div>
           <div className="sm:col-span-2"><label className={labelCls}>Address</label><input className={field} value={f.address} onChange={(e) => set('address', e.target.value)} /></div>
         </div>
+        <section className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-white/10 dark:bg-white/5">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Owner login</h3>
+            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Update the direct clinic portal login. Password is changed only when this field is filled.</p>
+          </div>
+          {loadingOwner ? (
+            <div className="flex items-center gap-2 text-xs text-gray-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading owner account...</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><label className={labelCls}>Owner name</label><input className={field} value={f.ownerName} onChange={(e) => set('ownerName', e.target.value)} placeholder="Clinic Owner" /></div>
+              <div>
+                <label className={labelCls}>Owner username</label>
+                <input className={field} value={f.ownerUsername} onChange={(e) => set('ownerUsername', normalizeUsernameInput(e.target.value))} placeholder="chat-smile-experts" autoComplete="username" />
+                {ownerUsername.message && (
+                  <p className={`mt-1 text-[11px] font-semibold ${ownerUsername.status === 'available' ? 'text-emerald-600' : ownerUsername.status === 'checking' ? 'text-gray-400' : 'text-rose-600'}`}>{ownerUsername.message}</p>
+                )}
+                <p className="mt-1 text-[11px] text-gray-400">Example: “Chat Smile Experts” becomes chat-smile-experts.</p>
+              </div>
+              <div className="sm:col-span-2"><label className={labelCls}>Owner email</label><input className={field} type="email" value={f.ownerEmail} onChange={(e) => set('ownerEmail', e.target.value)} placeholder="owner@clinic.com" /></div>
+              <div className="sm:col-span-2">
+                <label className={labelCls}>Set new owner password</label>
+                <input className={field} type="text" value={f.ownerPassword} onChange={(e) => set('ownerPassword', e.target.value)} placeholder="Leave blank to keep existing password" autoComplete="new-password" />
+                <p className="text-[11px] text-gray-400 mt-1">Minimum 10 characters. Saving a new password signs out older owner sessions.</p>
+              </div>
+            </div>
+          )}
+        </section>
         <ColorPicker label="Primary color" value={f.primaryColor} onChange={(v) => set('primaryColor', v)} />
         <ColorPicker label="Accent color" value={f.secondaryColor} onChange={(v) => set('secondaryColor', v)} />
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:hover:bg-white/10">Cancel</button>
-          <button onClick={submit} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-bold">
+          <button onClick={submit} disabled={saving || loadingOwner || ['checking', 'invalid', 'taken'].includes(ownerUsername.status)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-bold">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />} Save changes
           </button>
         </div>

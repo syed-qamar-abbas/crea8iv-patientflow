@@ -40,6 +40,17 @@ function pf_dental_financials_ensure($db) {
         $db->exec("CREATE INDEX IF NOT EXISTS IX_Expense_Clinic_Date ON Expense (clinicId, expenseDate)");
         $db->exec("CREATE INDEX IF NOT EXISTS IX_Expense_Clinic_Category ON Expense (clinicId, categoryId, expenseDate)");
         $db->exec("CREATE INDEX IF NOT EXISTS IX_Expense_Clinic_Branch ON Expense (clinicId, branchId, expenseDate)");
+        $db->exec("CREATE TABLE IF NOT EXISTS RecurringExpense (
+            id TEXT PRIMARY KEY, clinicId TEXT NOT NULL, branchId TEXT DEFAULT NULL,
+            categoryId TEXT DEFAULT NULL, description TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0,
+            frequency TEXT NOT NULL DEFAULT 'monthly', dueDay INTEGER NOT NULL DEFAULT 1,
+            paymentMethod TEXT DEFAULT NULL, isActive INTEGER NOT NULL DEFAULT 1,
+            lastPostedMonth TEXT DEFAULT NULL, lastPostedAt TEXT DEFAULT NULL,
+            createdBy TEXT DEFAULT NULL, createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )");
+        $db->exec("CREATE INDEX IF NOT EXISTS IX_RecurringExpense_Clinic_Active_Due ON RecurringExpense (clinicId, isActive, dueDay)");
+        $db->exec("CREATE INDEX IF NOT EXISTS IX_RecurringExpense_Clinic_Category ON RecurringExpense (clinicId, categoryId)");
         $db->exec("CREATE TABLE IF NOT EXISTS InvoiceProcedureCost (
             id TEXT PRIMARY KEY, clinicId TEXT NOT NULL, invoiceId TEXT NOT NULL,
             invoiceItemIndex INTEGER NOT NULL DEFAULT 0, appointmentId TEXT DEFAULT NULL,
@@ -87,6 +98,18 @@ function pf_dental_financials_ensure($db) {
         PRIMARY KEY (`id`), KEY `IX_Expense_Clinic_Date` (`clinicId`, `expenseDate`),
         KEY `IX_Expense_Clinic_Category` (`clinicId`, `categoryId`, `expenseDate`),
         KEY `IX_Expense_Clinic_Branch` (`clinicId`, `branchId`, `expenseDate`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE IF NOT EXISTS `RecurringExpense` (
+        `id` VARCHAR(36) NOT NULL, `clinicId` VARCHAR(36) NOT NULL, `branchId` VARCHAR(36) DEFAULT NULL,
+        `categoryId` VARCHAR(36) DEFAULT NULL, `description` VARCHAR(255) NOT NULL,
+        `amount` DOUBLE NOT NULL DEFAULT 0, `frequency` VARCHAR(30) NOT NULL DEFAULT 'monthly',
+        `dueDay` INT NOT NULL DEFAULT 1, `paymentMethod` VARCHAR(100) DEFAULT NULL,
+        `isActive` TINYINT(1) NOT NULL DEFAULT 1, `lastPostedMonth` VARCHAR(7) DEFAULT NULL,
+        `lastPostedAt` DATETIME DEFAULT NULL, `createdBy` VARCHAR(36) DEFAULT NULL,
+        `createdAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`), KEY `IX_RecurringExpense_Clinic_Active_Due` (`clinicId`, `isActive`, `dueDay`),
+        KEY `IX_RecurringExpense_Clinic_Category` (`clinicId`, `categoryId`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $db->exec("CREATE TABLE IF NOT EXISTS `InvoiceProcedureCost` (
         `id` VARCHAR(36) NOT NULL, `clinicId` VARCHAR(36) NOT NULL, `invoiceId` VARCHAR(36) NOT NULL,

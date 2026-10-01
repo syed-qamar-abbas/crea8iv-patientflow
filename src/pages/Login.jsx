@@ -4,7 +4,7 @@ import {
   Eye, EyeOff, Sparkles, CalendarCheck2, Users, Receipt, ShieldCheck, Activity,
 } from 'lucide-react';
 import { useClinic } from '../context/ClinicContext';
-import { appPath, fetchApi } from '../config/api';
+import { appPath, fetchPublicApi, resetStoredSessionForLogin } from '../config/api';
 import ClinicLogoMark from '../components/branding/ClinicLogoMark';
 
 const FEATURES = [
@@ -48,9 +48,12 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const data = await fetchApi('/auth/login', {
+      resetStoredSessionForLogin();
+      const data = await fetchPublicApi('/auth/login', {
         method: 'POST',
-          body: JSON.stringify({
+        body: JSON.stringify({
+          identifier: username.trim().toLowerCase(),
+          email: username.trim().toLowerCase(),
           username: username.trim().toLowerCase(),
           password,
         }),

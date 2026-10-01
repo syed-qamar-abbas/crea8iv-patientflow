@@ -24,7 +24,7 @@ import {
 import { useClinic } from '../../context/ClinicContext';
 import { useTheme } from '../../context/ThemeContext';
 import { getCurrentRole, getCurrentUser, ROLE_LABELS } from '../../config/roles';
-import { appPath, fetchApi } from '../../config/api';
+import { appPath, fetchApi, logoutSession } from '../../config/api';
 import WhatsNew from './WhatsNew';
 import { useTraining } from '../../context/TrainingContext';
 
@@ -184,11 +184,8 @@ export default function Header() {
     await loadNotifications();
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('clinic_auth');
-    localStorage.removeItem('clinic_token');
-    localStorage.removeItem('clinic_refresh');
-    localStorage.removeItem('clinic_user');
+  const handleLogout = async () => {
+    await logoutSession();
     window.location.assign(appPath('/login'));
   };
 

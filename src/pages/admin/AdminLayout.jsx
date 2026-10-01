@@ -2,7 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, Receipt, LogOut, LifeBuoy, SlidersHorizontal,
 } from 'lucide-react';
-import { appPath } from '../../config/api';
+import { appPath, logoutSession } from '../../config/api';
 import ClinicLogoMark from '../../components/branding/ClinicLogoMark';
 
 const PLATFORM_LOGO = '/crea8iv.png';
@@ -19,11 +19,8 @@ const NAV = [
 export default function AdminLayout() {
   const user = JSON.parse(localStorage.getItem('clinic_user') || '{}');
 
-  const handleLogout = () => {
-    localStorage.removeItem('clinic_auth');
-    localStorage.removeItem('clinic_token');
-    localStorage.removeItem('clinic_refresh');
-    localStorage.removeItem('clinic_user');
+  const handleLogout = async () => {
+    await logoutSession();
     window.location.assign(appPath('/login'));
   };
 

@@ -19,41 +19,22 @@ if ('serviceWorker' in navigator && import.meta.env.DEV) {
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    const entryScript = [...document.scripts]
-      .map((script) => script.src)
-      .find((src) => /\/assets\/index-[^/]+\.js(?:\?|$)/.test(src));
-    const buildId = entryScript?.match(/index-([^/.]+)\.js/)?.[1] || 'latest';
-    const workerUrl = `${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(buildId)}`;
+    const reloadKey = 'patientflow_sw_retired_20260825';
 
-    navigator.serviceWorker.register(workerUrl, { updateViaCache: 'none' }).then((registration) => {
-      registration.update().catch(() => {});
-
-      registration.addEventListener('updatefound', () => {
-        const newWorker = registration.installing;
-        if (!newWorker) return;
-        newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            newWorker.postMessage({ type: 'SKIP_WAITING' });
-          }
-        });
-      });
-    }).catch(() => {});
-
-    const reloadForWorker = (scriptUrl) => {
-      const reloadKey = 'patientflow_sw_reloaded_for';
-      const workerVersion = scriptUrl || workerUrl;
-      if (sessionStorage.getItem(reloadKey) === workerVersion) return;
-      sessionStorage.setItem(reloadKey, workerVersion);
+    Promise.all([
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister()))),
+      typeof caches !== 'undefined' && caches.keys
+        ? caches.keys().then((keys = []) => Promise.all(
+          keys
+            .filter((key) => key.startsWith('patientflow-'))
+            .map((key) => caches.delete(key)),
+        ))
+        : Promise.resolve(),
+    ]).then(() => {
+      if (!navigator.serviceWorker.controller || sessionStorage.getItem(reloadKey)) return;
+      sessionStorage.setItem(reloadKey, '1');
       window.location.reload();
-    };
-
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      reloadForWorker(navigator.serviceWorker.controller?.scriptURL);
-    });
-
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      if (event.data?.type !== 'PATIENTFLOW_UPDATED') return;
-      reloadForWorker(event.source?.scriptURL);
-    });
+    }).catch(() => {});
   });
 }

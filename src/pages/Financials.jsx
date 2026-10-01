@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, BarChart3, ChevronLeft, ChevronRight, DollarSign, Download, FileText, Loader2, Plus,
-  Pencil, Receipt, Save, Trash2, TrendingDown, TrendingUp, Upload, X
+  Pencil, Receipt, Repeat, Save, Trash2, TrendingDown, TrendingUp, Upload, X
 } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
-import { fetchApi, API_URL, peekApiCacheByPrefix } from '../config/api';
+import { fetchApi, API_URL, peekApiCache } from '../config/api';
 import { TableSkeleton, CardGridSkeleton } from '../components/ui/Skeleton';
 import { useClinic } from '../context/ClinicContext';
 
@@ -18,10 +18,32 @@ const localDate = (date = new Date()) => {
 };
 const today = () => localDate();
 const monthStart = () => localDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-const monthEnd = () => localDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
+const addDays = (date, days) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+const addMonths = (date, months) => {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+};
+const rangePresets = [
+  { key: 'thisMonth', label: 'This Month', getRange: () => ({ from: monthStart(), to: today() }) },
+  { key: 'last7', label: '7 Days', getRange: () => ({ from: localDate(addDays(new Date(), -6)), to: today() }) },
+  { key: 'last30', label: '30 Days', getRange: () => ({ from: localDate(addDays(new Date(), -29)), to: today() }) },
+  { key: 'last3m', label: '3 Months', getRange: () => ({ from: localDate(addMonths(new Date(), -3)), to: today() }) },
+  { key: 'last6m', label: '6 Months', getRange: () => ({ from: localDate(addMonths(new Date(), -6)), to: today() }) },
+  { key: 'last1y', label: '1 Year', getRange: () => ({ from: localDate(addMonths(new Date(), -12)), to: today() }) },
+];
+const defaultRangePreset = rangePresets.find(preset => preset.key === 'last3m') || rangePresets[0];
+const financialSummaryEndpoint = (range) => `/financials/summary?from=${range.from}&to=${range.to}`;
 const fileBase = API_URL.replace(/\/api\/v1\/?$/, '');
 const emptyExpenseForm = (categoryId = '') => ({
   categoryId, branchId: '', description: '', amount: '', expenseDate: today(), paymentMethod: 'Cash', receipt: null,
+});
+const emptyRecurringForm = (categoryId = '') => ({
+  categoryId, branchId: '', description: '', amount: '', dueDay: '1', paymentMethod: 'Cash', isActive: true,
 });
 
 function SummaryCard({ label, value, helper, icon: Icon, tone }) {
@@ -144,7 +166,10 @@ export default function Financials() {
   const { term } = useClinic();
   const serviceLabel = term('service', 'Service');
   const patientLabel = term('patient', 'Patient');
-  const [summary, setSummary] = useState(() => peekApiCacheByPrefix('/financials/summary') ?? null);
+  const [summary, setSummary] = useState(() => {
+    const defaultRange = defaultRangePreset.getRange();
+    return peekApiCache(financialSummaryEndpoint(defaultRange)) ?? null;
+  });
   const [monthly, setMonthly] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [expenses, setExpenses] = useState([]);
@@ -154,12 +179,17 @@ export default function Financials() {
   const [procedureExpensePage, setProcedureExpensePage] = useState(1);
   const [procedureExpenseMeta, setProcedureExpenseMeta] = useState({ totalAmount: 0, totalRecords: 0, pages: 1 });
   const [categories, setCategories] = useState([]);
+  const [recurringExpenses, setRecurringExpenses] = useState([]);
   const [branches, setBranches] = useState([]);
   const [profitability, setProfitability] = useState([]);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('');
   const [procedureRows, setProcedureRows] = useState([]);
-  const [range, setRange] = useState({ from: monthStart(), to: monthEnd() });
+  const [range, setRange] = useState(() => defaultRangePreset.getRange());
+  const [rangePreset, setRangePreset] = useState(defaultRangePreset.key);
   const [expenseForm, setExpenseForm] = useState(() => emptyExpenseForm());
+  const [recurringForm, setRecurringForm] = useState(() => emptyRecurringForm());
+  const [editingRecurringId, setEditingRecurringId] = useState('');
+  const [postingRecurringId, setPostingRecurringId] = useState('');
   const [editingExpenseId, setEditingExpenseId] = useState('');
   const [newCategory, setNewCategory] = useState('');
   const [editingCats, setEditingCats] = useState(false);
@@ -175,13 +205,14 @@ export default function Financials() {
     setLoading(true);
     setError('');
     try {
-      const [sum, months, txns, expensePayload, procedureExpensePayload, cats, branchRows, profitRows] = await Promise.all([
-        fetchApi(`/financials/summary?from=${range.from}&to=${range.to}`),
-        fetchApi('/financials/monthly'),
+      const [sum, months, txns, expensePayload, procedureExpensePayload, cats, recurringRows, branchRows, profitRows] = await Promise.all([
+        fetchApi(financialSummaryEndpoint(range)),
+        fetchApi(`/financials/monthly?from=${range.from}&to=${range.to}`),
         fetchApi('/financials/transactions?limit=50'),
         fetchApi(`/expenses?from=${range.from}&to=${range.to}&paginated=true&page=${expensePage}&limit=20`),
         fetchApi(`/financials/procedure-expenses?from=${range.from}&to=${range.to}&page=${procedureExpensePage}&limit=20`),
         fetchApi('/expenses/categories'),
+        fetchApi('/expenses/recurring').catch(() => []),
         fetchApi('/branches').catch(() => []),
         fetchApi('/financials/profitability').catch(() => []),
       ]);
@@ -201,9 +232,11 @@ export default function Financials() {
         pages: Number(procedureExpensePayload?.pages || 1),
       });
       setCategories(Array.isArray(cats) ? cats : []);
+      setRecurringExpenses(Array.isArray(recurringRows) ? recurringRows : []);
       setBranches(Array.isArray(branchRows) ? branchRows : []);
       setProfitability(Array.isArray(profitRows) ? profitRows : []);
       setExpenseForm(current => ({ ...current, categoryId: current.categoryId || cats?.[0]?.id || '' }));
+      setRecurringForm(current => ({ ...current, categoryId: current.categoryId || cats?.[0]?.id || '' }));
       if (!selectedInvoiceId && Array.isArray(txns) && txns[0]?.id) setSelectedInvoiceId(txns[0].id);
     } catch (err) {
       setError(err.message || 'Financial data could not be loaded.');
@@ -222,6 +255,18 @@ export default function Financials() {
   }, [selectedInvoiceId]);
 
   const expenseTotal = expenseMeta.totalAmount;
+  const selectPreset = (preset) => {
+    setExpensePage(1);
+    setProcedureExpensePage(1);
+    setRangePreset(preset.key);
+    setRange(preset.getRange());
+  };
+  const setCustomRange = (field, value) => {
+    setExpensePage(1);
+    setProcedureExpensePage(1);
+    setRangePreset('custom');
+    setRange(current => ({ ...current, [field]: value }));
+  };
   const topRevenue = useMemo(() => {
     const grouped = {};
     transactions.forEach(txn => (txn.items || []).forEach(item => {
@@ -347,6 +392,82 @@ export default function Financials() {
     }
   };
 
+  const saveRecurringExpense = async () => {
+    if (!recurringForm.description.trim()) return setError('Recurring expense description is required.');
+    if (Number(recurringForm.amount) <= 0) return setError('Recurring expense amount must be greater than zero.');
+    const dueDay = Number(recurringForm.dueDay);
+    if (dueDay < 1 || dueDay > 31) return setError('Recurring due day must be between 1 and 31.');
+    setSaving(true);
+    setError('');
+    try {
+      const payload = {
+        categoryId: recurringForm.categoryId || null,
+        branchId: recurringForm.branchId || null,
+        description: recurringForm.description,
+        amount: Number(recurringForm.amount),
+        dueDay,
+        paymentMethod: recurringForm.paymentMethod || null,
+        isActive: !!recurringForm.isActive,
+      };
+      if (editingRecurringId) {
+        await fetchApi(`/expenses/recurring/${editingRecurringId}`, { method: 'PUT', body: JSON.stringify(payload) });
+      } else {
+        await fetchApi('/expenses/recurring', { method: 'POST', body: JSON.stringify(payload) });
+      }
+      setEditingRecurringId('');
+      setRecurringForm(emptyRecurringForm(categories[0]?.id || ''));
+      await load();
+    } catch (err) {
+      setError(err.message || 'Recurring expense could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEditRecurring = (item) => {
+    setEditingRecurringId(item.id);
+    setRecurringForm({
+      categoryId: categories.some(cat => String(cat.id) === String(item.categoryId)) ? item.categoryId : '',
+      branchId: item.branchId || '',
+      description: item.description || '',
+      amount: String(item.amount ?? ''),
+      dueDay: String(item.dueDay || 1),
+      paymentMethod: item.paymentMethod || 'Cash',
+      isActive: !!item.isActive,
+    });
+  };
+
+  const cancelRecurringEdit = () => {
+    setEditingRecurringId('');
+    setRecurringForm(emptyRecurringForm(categories[0]?.id || ''));
+  };
+
+  const archiveRecurring = async (item) => {
+    setSaving(true);
+    setError('');
+    try {
+      await fetchApi(`/expenses/recurring/${item.id}`, { method: 'DELETE' });
+      await load();
+    } catch (err) {
+      setError(err.message || 'Recurring expense could not be archived.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const postRecurring = async (item) => {
+    setPostingRecurringId(item.id);
+    setError('');
+    try {
+      await fetchApi(`/expenses/recurring/${item.id}/post`, { method: 'POST', body: JSON.stringify({}) });
+      await load();
+    } catch (err) {
+      setError(err.message || 'Recurring expense could not be posted.');
+    } finally {
+      setPostingRecurringId('');
+    }
+  };
+
   const deleteExpense = async () => {
     if (!deleteExpenseTarget) return;
     setSaving(true);
@@ -401,10 +522,24 @@ export default function Financials() {
           <h1 className="text-xl font-bold text-gray-950 dark:text-white">Financials</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Revenue, expenses, procedure costs, and profit reporting for authorized roles.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <input type="date" value={range.from} onChange={e => { setExpensePage(1); setProcedureExpensePage(1); setRange({ ...range, from: e.target.value }); }} className="rounded-lg border border-gray-200 px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" title="Report start date" />
-          <input type="date" value={range.to} onChange={e => { setExpensePage(1); setProcedureExpensePage(1); setRange({ ...range, to: e.target.value }); }} className="rounded-lg border border-gray-200 px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" title="Report end date" />
-          <Button variant="secondary" size="sm" onClick={load}><Download className="h-4 w-4" /> Refresh</Button>
+        <div className="flex flex-col gap-2 md:items-end">
+          <div className="flex max-w-full gap-1.5 overflow-x-auto pb-1 md:justify-end">
+            {rangePresets.map(preset => (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => selectPreset(preset)}
+                className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${rangePreset === preset.key ? 'border-transparent bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950' : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-slate-900 dark:text-gray-300 dark:hover:border-white/20'}`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 md:justify-end">
+            <input type="date" value={range.from} onChange={e => setCustomRange('from', e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" title="Report start date" />
+            <input type="date" value={range.to} onChange={e => setCustomRange('to', e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-xs dark:border-white/10 dark:bg-slate-900" title="Report end date" />
+            <Button variant="secondary" size="sm" onClick={load}><Download className="h-4 w-4" /> Refresh</Button>
+          </div>
         </div>
       </div>
 
@@ -417,6 +552,84 @@ export default function Financials() {
         <SummaryCard label="Total Expenses" value={money(summary?.totalExpenses)} helper="General expenses + procedure costs" icon={TrendingDown} tone="bg-rose-50 text-rose-600" />
         <SummaryCard label="Net Profit" value={money(summary?.profit)} helper="Collected − total expenses" icon={TrendingUp} tone="bg-indigo-50 text-indigo-700" />
         <SummaryCard label="Outstanding" value={money(summary?.outstandingPayments)} helper="Current unpaid balance across active invoices" icon={AlertCircle} tone="bg-sky-50 text-sky-700" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-gray-950 dark:text-white">{editingRecurringId ? 'Edit Monthly Expense' : 'Setup Monthly Expense'}</h2>
+              <p className="mt-1 text-xs text-gray-400">Rent, internet, salaries, marketing, lab, and other repeat bills.</p>
+            </div>
+            {editingRecurringId && <button type="button" onClick={cancelRecurringEdit} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10" aria-label="Cancel recurring expense edit"><X className="h-4 w-4" /></button>}
+          </div>
+          <div className="mt-4 space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <select value={recurringForm.categoryId} onChange={e => setRecurringForm({ ...recurringForm, categoryId: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" title="Recurring expense category">
+                {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+              </select>
+              <select value={recurringForm.branchId} onChange={e => setRecurringForm({ ...recurringForm, branchId: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" title="Branch">
+                <option value="">All branches</option>
+                {branches.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+              </select>
+            </div>
+            <input value={recurringForm.description} onChange={e => setRecurringForm({ ...recurringForm, description: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder="Description, e.g. clinic rent" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <input type="number" min="1" value={recurringForm.amount} onChange={e => setRecurringForm({ ...recurringForm, amount: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder="Amount" />
+              <input type="number" min="1" max="31" value={recurringForm.dueDay} onChange={e => setRecurringForm({ ...recurringForm, dueDay: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" placeholder="Due day" />
+              <select value={recurringForm.paymentMethod} onChange={e => setRecurringForm({ ...recurringForm, paymentMethod: e.target.value })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-900" title="Payment method">
+                <option>Cash</option>
+                <option>Bank Transfer</option>
+                <option>Card</option>
+                <option>Wallet</option>
+              </select>
+            </div>
+            <label className="inline-flex items-center gap-2 text-xs font-bold text-gray-600 dark:text-gray-300">
+              <input type="checkbox" checked={!!recurringForm.isActive} onChange={e => setRecurringForm({ ...recurringForm, isActive: e.target.checked })} />
+              Active every month
+            </label>
+            <div className="flex justify-end gap-2">
+              {editingRecurringId && <Button variant="ghost" onClick={cancelRecurringEdit} disabled={saving}>Cancel</Button>}
+              <Button onClick={saveRecurringExpense} disabled={saving}>
+                <Repeat className="h-4 w-4" /> {editingRecurringId ? 'Save Monthly Expense' : 'Add Monthly Expense'}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900 xl:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-gray-950 dark:text-white">Monthly Expense Checklist</h2>
+              <p className="mt-1 text-xs text-gray-400">Post the current month’s recurring bills without retyping them.</p>
+            </div>
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-600 dark:bg-white/10 dark:text-gray-300">{recurringExpenses.filter(item => item.isActive).length} active</span>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {recurringExpenses.map(item => (
+              <div key={item.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="truncate text-xs font-black text-gray-950 dark:text-white">{item.description}</p>
+                      {item.isRecordedThisMonth ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">Recorded</span> : null}
+                      {item.isDue ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-700">Due</span> : null}
+                      {!item.isActive ? <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-black text-gray-600">Archived</span> : null}
+                    </div>
+                    <p className="mt-1 text-[11px] text-gray-500">{item.categoryName || 'General'} · due day {item.dueDay}</p>
+                  </div>
+                  <b className="shrink-0 text-xs text-gray-950 dark:text-white">{money(item.amount)}</b>
+                </div>
+                <div className="mt-3 flex flex-wrap justify-end gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => startEditRecurring(item)} disabled={saving}><Pencil className="h-4 w-4" /> Edit</Button>
+                  {item.isActive && !item.isRecordedThisMonth && <Button size="sm" onClick={() => postRecurring(item)} disabled={saving || postingRecurringId === item.id}><Plus className="h-4 w-4" /> {postingRecurringId === item.id ? 'Posting' : 'Post'}</Button>}
+                  {item.isActive && <Button variant="danger" size="sm" onClick={() => archiveRecurring(item)} disabled={saving}><Trash2 className="h-4 w-4" /> Archive</Button>}
+                </div>
+              </div>
+            ))}
+            {recurringExpenses.length === 0 && <EmptyState icon={Repeat} title="No monthly expenses setup" body="Add rent, internet, salaries, marketing, or lab bills once, then post them each month." />}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">

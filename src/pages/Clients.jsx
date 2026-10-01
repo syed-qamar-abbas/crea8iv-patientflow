@@ -276,6 +276,7 @@ export default function Clients() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [tierFilter, setTierFilter] = useState('all');
+  const [sort, setSort] = useState('date_desc');
   const [viewMode, setViewMode] = useState('grid');
   // Seed from the last-seen cached list so a revisit renders instantly while the
   // fresh data loads in the background (stale-while-revalidate).
@@ -300,6 +301,7 @@ export default function Clients() {
     if (search.trim()) params.set('search', search.trim());
     if (statusFilter !== 'all') params.set('status', statusFilter);
     if (tierFilter !== 'all') params.set('tier', tierFilter);
+    if (sort) params.set('sort', sort);
 
     setLoading(true);
     try {
@@ -326,7 +328,7 @@ export default function Clients() {
     const timer = setTimeout(() => loadClients(), search.trim() ? 250 : 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, search, statusFilter, tierFilter]);
+  }, [pagination.page, search, statusFilter, tierFilter, sort]);
 
   const handleSave = async (formData) => {
     setSaving(true);
@@ -395,6 +397,19 @@ export default function Clients() {
             <option value="Gold">Gold</option>
             <option value="Silver">Silver</option>
             <option value="Bronze">Bronze</option>
+          </select>
+          <select value={sort} onChange={e => { setSort(e.target.value); goToPage(1); }}
+            className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white dark:bg-white/5">
+            <option value="date_desc">Date — newest first</option>
+            <option value="date_asc">Date — oldest first</option>
+            <option value="name_asc">{term('patient', 'Patient')} name — A to Z</option>
+            <option value="name_desc">{term('patient', 'Patient')} name — Z to A</option>
+            {canViewBusinessFinancials() && (
+              <>
+                <option value="earning_desc">Earning — high to low</option>
+                <option value="earning_asc">Earning — low to high</option>
+              </>
+            )}
           </select>
           <div className="flex bg-gray-100 dark:bg-white/5 rounded-lg p-0.5">
             <button onClick={() => setViewMode('grid')}
