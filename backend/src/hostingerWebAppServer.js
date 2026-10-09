@@ -1,1 +1,1 @@
-import './hostingerWebAppServer.cjs';
+require('./hostingerWebAppServer.cjs');
