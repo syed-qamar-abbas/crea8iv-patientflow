@@ -93,6 +93,8 @@ function parseAllowedOrigins() {
     'https://www.thesmilexperts.com',
     'https://portal.thesmilexperts.com',
     'https://portal.smileexperts.com',
+    'https://venndental.com',
+    'https://www.venndental.com',
     'http://localhost:5173',
     'http://localhost:5174',
     ...configured,
@@ -112,7 +114,9 @@ function isOriginAllowed(origin) {
       || host === 'thesmilexperts.com'
       || host === 'www.thesmilexperts.com'
       || host === 'portal.thesmilexperts.com'
-      || host === 'portal.smileexperts.com';
+      || host === 'portal.smileexperts.com'
+      || host === 'venndental.com'
+      || host === 'www.venndental.com';
   } catch (error) {
     return false;
   }

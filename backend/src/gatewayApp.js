@@ -78,6 +78,8 @@ function parseAllowedOrigins() {
   return new Set([
     'https://crea8ivmedia.com',
     CANONICAL_PATIENTFLOW_ORIGIN,
+    'https://venndental.com',
+    'https://www.venndental.com',
     'http://localhost:5173',
     'http://localhost:5174',
     ...configured,
@@ -94,7 +96,9 @@ function isOriginAllowed(origin) {
     return host === 'crea8ivmedia.com'
       || host.endsWith('.crea8ivmedia.com')
       || host === 'crea8ivpatientflow.com'
-      || host.endsWith('.crea8ivpatientflow.com');
+      || host.endsWith('.crea8ivpatientflow.com')
+      || host === 'venndental.com'
+      || host === 'www.venndental.com';
   } catch (error) {
     return false;
   }
